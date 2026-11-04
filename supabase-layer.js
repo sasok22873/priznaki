@@ -92,6 +92,108 @@
     };
   }
 
+  function eventToRow(e) {
+    return {
+      title: e.title || '',
+      date: e.date || null,
+      time: e.time || '',
+      type: e.type || '',
+      place: e.place || '',
+      task: e.task || ''
+    };
+  }
+
+  function rowToEvent(r) {
+    return {
+      id: r.id,
+      title: r.title || '',
+      date: r.date || '',
+      time: r.time || '',
+      type: r.type || '',
+      place: r.place || '',
+      task: r.task || ''
+    };
+  }
+
+  function moneyToRow(m) {
+    return {
+      type: m.type || '',
+      amount: Number(m.amount) || 0,
+      title: m.title || '',
+      date: m.date || null,
+      category: m.category || '',
+      person: m.person || '',
+      project: m.project || '',
+      state: m.state || '',
+      reimburse: m.reimburse || '',
+      task: m.task || ''
+    };
+  }
+
+  function rowToMoney(r) {
+    return {
+      id: r.id,
+      type: r.type || '',
+      amount: r.amount || 0,
+      title: r.title || '',
+      date: r.date || '',
+      category: r.category || '',
+      person: r.person || '',
+      project: r.project || '',
+      state: r.state || '',
+      reimburse: r.reimburse || '',
+      task: r.task || ''
+    };
+  }
+
+  function getEvents() { try { return events; } catch (e) { return []; } }
+  function getMoney()  { try { return money; }  catch (e) { return []; } }
+
+  async function loadEventsMoney() {
+    const ev = await client.from('events').select('*').order('date', { ascending: true });
+    if (ev.error) {
+      dbBanner('ЧТЕНИЕ событий: ' + (ev.error.message || '') + '\ncode=' + (ev.error.code || '-'));
+    } else {
+      const arr = getEvents();
+      arr.length = 0;
+      (ev.data || []).forEach(function (r) { arr.push(rowToEvent(r)); });
+    }
+
+    const mo = await client.from('money').select('*').order('date', { ascending: false });
+    if (mo.error) {
+      dbBanner('ЧТЕНИЕ бюджета: ' + (mo.error.message || '') + '\ncode=' + (mo.error.code || '-'));
+    } else {
+      const arr = getMoney();
+      arr.length = 0;
+      (mo.data || []).forEach(function (r) { arr.push(rowToMoney(r)); });
+    }
+  }
+
+  async function saveEventsMoney() {
+    if (!currentProfile || !client) return;
+    if (['owner', 'member'].indexOf(currentProfile.role) === -1) return;
+
+    for (const e of getEvents().slice()) {
+      if (e.id) continue;
+      const { data, error } = await client.from('events').insert(eventToRow(e)).select().single();
+      if (error) {
+        dbBanner('ЗАПИСЬ события отклонена\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
+        continue;
+      }
+      e.id = data.id;
+    }
+
+    for (const m of getMoney().slice()) {
+      if (m.id) continue;
+      const { data, error } = await client.from('money').insert(moneyToRow(m)).select().single();
+      if (error) {
+        dbBanner('ЗАПИСЬ денег отклонена\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
+        continue;
+      }
+      m.id = data.id;
+    }
+  }
+
   function getGoals()    { try { return goals; }    catch (e) { return []; } }
   function getProjects() { try { return projects; } catch (e) { return []; } }
 
@@ -346,8 +448,9 @@
     renderWhoami();
     await loadTasks();
     await loadGoalsProjects();
+    await loadEventsMoney();
     window.renderAll && window.renderAll();
-    window.persist = function () { saveTasks(); saveGoalsProjects(); };
+    window.persist = function () { saveTasks(); saveGoalsProjects(); saveEventsMoney(); };
 
   }
 
