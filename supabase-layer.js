@@ -5,7 +5,6 @@
 
   let client = null;
   let currentProfile = null;
-  const dbMeta = new Map();
   let userLoggedOut = false;
 
   // --- диагностика: показываем ошибки базы на экране ---
@@ -149,115 +148,96 @@
   function getEvents() { try { return events; } catch (e) { return []; } }
   function getMoney()  { try { return money; }  catch (e) { return []; } }
 
-  async function loadEventsMoney() {
-    const ev = await client.from('events').select('*').order('date', { ascending: true });
-    if (ev.error) {
-      dbBanner('ЧТЕНИЕ событий: ' + (ev.error.message || '') + '\ncode=' + (ev.error.code || '-'));
-    } else {
-      const arr = getEvents();
-      arr.length = 0;
-      (ev.data || []).forEach(function (r) { arr.push(rowToEvent(r)); });
-    }
-
-    const mo = await client.from('money').select('*').order('date', { ascending: false });
-    if (mo.error) {
-      dbBanner('ЧТЕНИЕ бюджета: ' + (mo.error.message || '') + '\ncode=' + (mo.error.code || '-'));
-    } else {
-      const arr = getMoney();
-      arr.length = 0;
-      (mo.data || []).forEach(function (r) { arr.push(rowToMoney(r)); });
-    }
-  }
-
-  async function saveEventsMoney() {
-    if (!currentProfile || !client) return;
-    if (['owner', 'member'].indexOf(currentProfile.role) === -1) return;
-
-    for (const e of getEvents().slice()) {
-      if (e.id) continue;
-      const { data, error } = await client.from('events').insert(eventToRow(e)).select().single();
-      if (error) {
-        dbBanner('ЗАПИСЬ события отклонена\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
-        continue;
-      }
-      e.id = data.id;
-    }
-
-    for (const m of getMoney().slice()) {
-      if (m.id) continue;
-      const { data, error } = await client.from('money').insert(moneyToRow(m)).select().single();
-      if (error) {
-        dbBanner('ЗАПИСЬ денег отклонена\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
-        continue;
-      }
-      m.id = data.id;
-    }
-  }
-
   function getGoals()    { try { return goals; }    catch (e) { return []; } }
   function getProjects() { try { return projects; } catch (e) { return []; } }
 
-  async function loadGoalsProjects() {
-    const g = await client.from('goals').select('*').order('created_at', { ascending: false });
-    if (g.error) {
-      dbBanner('ЧТЕНИЕ целей: ' + (g.error.message || '') + '\ncode=' + (g.error.code || '-'));
-    } else {
-      const arr = getGoals();
-      arr.length = 0;
-      (g.data || []).forEach(function (r) { arr.push(rowToGoal(r)); });
-    }
+  const TABLES = [
+    { table: 'tasks', get: getTasks, toRow: taskToRow, fromRow: rowToTask, order: 'created_at', desc: true,
+      extra: function () { return { owner_id: currentProfile.id }; } },
+    { table: 'goals', get: getGoals, toRow: goalToRow, fromRow: rowToGoal, order: 'created_at', desc: true },
+    { table: 'projects', get: getProjects, toRow: projectToRow, fromRow: rowToProject, order: 'created_at', desc: true },
+    { table: 'events', get: getEvents, toRow: eventToRow, fromRow: rowToEvent, order: 'date', desc: false },
+    { table: 'money', get: getMoney, toRow: moneyToRow, fromRow: rowToMoney, order: 'date', desc: true }
+  ];
+  const snaps = {};
+  TABLES.forEach(function (c) { snaps[c.table] = new Map(); });
+  let saveQueue = Promise.resolve();
 
-    const pr = await client.from('projects').select('*').order('created_at', { ascending: false });
-    if (pr.error) {
-      dbBanner('ЧТЕНИЕ проектов: ' + (pr.error.message || '') + '\ncode=' + (pr.error.code || '-'));
-    } else {
-      const arr = getProjects();
-      arr.length = 0;
-      (pr.data || []).forEach(function (r) { arr.push(rowToProject(r)); });
+  async function loadTable(c) {
+    const { data, error } = await client.from(c.table).select('*').order(c.order, { ascending: !c.desc });
+    if (error) {
+      dbBanner('ЧТЕНИЕ ' + c.table + ': ' + (error.message || '') + '\ncode=' + (error.code || '-'));
+      return;
     }
-
-    // у каждой цели — сколько проектов на неё ссылается
-    const allProjects = getProjects();
-    getGoals().forEach(function (g) {
-      g.projects = allProjects.filter(function (p) { return p.goal && p.goal === g.title; }).length;
+    const arr = c.get();
+    const snap = snaps[c.table];
+    arr.length = 0;
+    snap.clear();
+    (data || []).forEach(function (r) {
+      const item = c.fromRow(r);
+      arr.push(item);
+      snap.set(r.id, JSON.stringify(c.toRow(item)));
     });
   }
 
-  async function saveGoalsProjects() {
-    if (!currentProfile || !client) return;
-    if (['owner', 'member'].indexOf(currentProfile.role) === -1) return;
+  async function loadAll() {
+    for (const c of TABLES) await loadTable(c);
+    getGoals().forEach(function (g) {
+      g.projects = getProjects().filter(function (p) { return p.goal && p.goal === g.title; }).length;
+    });
+  }
 
-    // цели
-    for (const g of getGoals().slice()) {
-      const row = goalToRow(g);
-      if (!g.id) {
-        const { data, error } = await client.from('goals').insert(row).select().single();
-        if (error) {
-          dbBanner('ЗАПИСЬ цели отклонена\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
-          continue;
-        }
-        g.id = data.id;
-      } else {
-        const { error } = await client.from('goals').update(row).eq('id', g.id);
-        if (error) dbBanner('ИЗМЕНЕНИЕ цели отклонено\n' + (error.message || ''));
+  async function saveTable(c) {
+    const arr = c.get();
+    const snap = snaps[c.table];
+    const liveIds = new Set(arr.map(function (x) { return x.id; }).filter(Boolean));
+
+    for (const id of Array.from(snap.keys())) {
+      if (liveIds.has(id)) continue;
+      const { error } = await client.from(c.table).delete().eq('id', id);
+      if (error) {
+        dbBanner('УДАЛЕНИЕ ' + c.table + ' отклонено\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
+        continue;
       }
+      snap.delete(id);
     }
 
-    // проекты
-    for (const p of getProjects().slice()) {
-      const row = projectToRow(p);
-      if (!p.id) {
-        const { data, error } = await client.from('projects').insert(row).select().single();
+    for (const item of arr.slice()) {
+      const row = c.toRow(item);
+      if (!item.id) {
+        if (c.extra) Object.assign(row, c.extra());
+        const { data, error } = await client.from(c.table).insert(row).select().single();
         if (error) {
-          dbBanner('ЗАПИСЬ проекта отклонена\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
+          dbBanner('ЗАПИСЬ ' + c.table + ' отклонена\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
           continue;
         }
-        p.id = data.id;
+        item.id = data.id;
+        snap.set(data.id, JSON.stringify(c.toRow(item)));
       } else {
-        const { error } = await client.from('projects').update(row).eq('id', p.id);
-        if (error) dbBanner('ИЗМЕНЕНИЕ проекта отклонено\n' + (error.message || ''));
+        const json = JSON.stringify(row);
+        if (snap.get(item.id) === json) continue;
+        const { error } = await client.from(c.table).update(row).eq('id', item.id);
+        if (error) {
+          dbBanner('ИЗМЕНЕНИЕ ' + c.table + ' отклонено\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
+          continue;
+        }
+        snap.set(item.id, json);
       }
     }
+  }
+
+  function saveAll() {
+    if (!currentProfile || !client) return saveQueue;
+    if (['owner', 'member'].indexOf(currentProfile.role) === -1) {
+      window.toast && window.toast('Режим просмотра: изменения не сохраняются');
+      return saveQueue;
+    }
+    saveQueue = saveQueue.then(async function () {
+      for (const c of TABLES) await saveTable(c);
+    }).catch(function (err) {
+      dbBanner('СОХРАНЕНИЕ: ' + ((err && err.message) || err));
+    });
+    return saveQueue;
   }
 
   const overlay = document.createElement('div');
@@ -344,71 +324,6 @@
     return row;
   }
 
-  async function loadTasks() {
-    const { data, error } = await client.from('tasks').select('*').order('created_at', { ascending: false });
-    if (error) {
-      console.error('tasks load', error);
-      dbBanner('ЧТЕНИЕ задач: ' + (error.message || '') + '\ncode=' + (error.code || '-'));
-      window.toast && window.toast('Не удалось загрузить задачи: ' + error.message);
-      return;
-    }
-    const arr = getTasks();
-    arr.length = 0;
-    dbMeta.clear();
-    (data || []).forEach(function (r) {
-      arr.push(rowToTask(r));
-      dbMeta.set(r.id, JSON.stringify(taskToRow(rowToTask(r))));
-    });
-  }
-
-  async function saveTasks() {
-    if (!currentProfile || !client) return;
-    if (['owner', 'member'].indexOf(currentProfile.role) === -1) {
-      dbBanner('СОХРАНЕНИЕ ОТКЛЮЧЕНО\nваша роль в профиле: "' + currentProfile.role + '"\n' +
-        'разрешены только owner или member.\nИсправьте роль в таблице profiles.');
-      window.toast && window.toast('Режим просмотра: изменения не сохраняются');
-      return;
-    }
-    const arr = getTasks();
-    for (const t of arr.slice()) {
-      const row = taskToRow(t);
-      if (!t.id) {
-        row.owner_id = currentProfile.id;
-        row.created_by = currentProfile.id;
-        let { data, error } = await client.from('tasks').insert(row).select().single();
-        if (error && /created_by/.test(error.message || '')) {
-          const fallback = Object.assign({}, row);
-          delete fallback.created_by;
-          ({ data, error } = await client.from('tasks').insert(fallback).select().single());
-        }
-        if (error) {
-          console.error('task insert', error);
-          dbBanner('ЗАПИСЬ задачи отклонена базой\n' +
-            'сообщение: ' + (error.message || '-') + '\n' +
-            'код: ' + (error.code || '-') + '\n' +
-            'детали: ' + (error.details || '-') + '\n' +
-            'подсказка: ' + (error.hint || '-') + '\n\n' +
-            'отправляемые поля: ' + Object.keys(row).join(', '));
-          window.toast && window.toast('Ошибка сохранения: ' + error.message);
-          continue;
-        }
-        t.id = data.id;
-        dbMeta.set(data.id, JSON.stringify(taskToRow(rowToTask(data))));
-      } else {
-        const snapshot = JSON.stringify(row);
-        if (dbMeta.get(t.id) !== snapshot) {
-          const { error } = await client.from('tasks').update(row).eq('id', t.id);
-          if (error) {
-            console.error('task update', error);
-            dbBanner('ИЗМЕНЕНИЕ задачи отклонено\n' + (error.message || '') + '\nкод: ' + (error.code || '-'));
-            continue;
-          }
-          dbMeta.set(t.id, snapshot);
-        }
-      }
-    }
-  }
-
   function renderWhoami() {
     const foot = document.querySelector('.side-foot');
     if (!foot || !currentProfile) return;
@@ -446,11 +361,9 @@
     currentProfile = prof;
     overlay.classList.remove('open');
     renderWhoami();
-    await loadTasks();
-    await loadGoalsProjects();
-    await loadEventsMoney();
+    await loadAll();
     window.renderAll && window.renderAll();
-    window.persist = function () { saveTasks(); saveGoalsProjects(); saveEventsMoney(); };
+    window.persist = saveAll;
 
   }
 
@@ -458,7 +371,7 @@
     userLoggedOut = true;
     if (client) await client.auth.signOut();
     currentProfile = null;
-    dbMeta.clear();
+    TABLES.forEach(function (c) { snaps[c.table].clear(); });
     const arr = getTasks();
     if (arr.length) arr.length = 0;
     window.renderAll && window.renderAll();
