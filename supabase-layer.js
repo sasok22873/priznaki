@@ -132,8 +132,14 @@
     for (const t of arr.slice()) {
       const row = taskToRow(t);
       if (!t.id) {
+        row.owner_id = currentProfile.id;
         row.created_by = currentProfile.id;
-        const { data, error } = await client.from('tasks').insert(row).select().single();
+        let { data, error } = await client.from('tasks').insert(row).select().single();
+        if (error && /created_by/.test(error.message || '')) {
+          const fallback = Object.assign({}, row);
+          delete fallback.created_by;
+          ({ data, error } = await client.from('tasks').insert(fallback).select().single());
+        }
         if (error) {
           console.error('task insert', error);
           window.toast && window.toast('Ошибка сохранения: ' + error.message);
