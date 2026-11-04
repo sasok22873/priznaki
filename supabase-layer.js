@@ -6,6 +6,7 @@
   let client = null;
   let currentProfile = null;
   const dbMeta = new Map();
+  let userLoggedOut = false;
 
   // --- диагностика: показываем ошибки базы на экране ---
   function dbBanner(msg) {
@@ -351,6 +352,7 @@
   }
 
   async function logout() {
+    userLoggedOut = true;
     if (client) await client.auth.signOut();
     currentProfile = null;
     dbMeta.clear();
@@ -362,19 +364,21 @@
   }
 
   function init() {
-    overlay.classList.add('open');
-
     if (!URL || !KEY) {
+      overlay.classList.add('open');
       showError('Файл config.js не заполнен. Впишите SUPABASE_URL и SUPABASE_ANON_KEY.');
       document.getElementById('authSubmit').disabled = true;
       return;
     }
     if (!window.supabase || !window.supabase.createClient) {
+      overlay.classList.add('open');
       showError('Библиотека Supabase не загрузилась. Проверьте интернет и обновите страницу.');
       return;
     }
 
-    client = window.supabase.createClient(URL, KEY);
+    client = window.supabase.createClient(URL, KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storage: window.localStorage }
+    });
     window.supabaseClient = client;
 
     document.getElementById('authForm').addEventListener('submit', async function (e) {
@@ -398,11 +402,17 @@
     });
 
     client.auth.onAuthStateChange(function (event) {
-      if (event === 'SIGNED_OUT') overlay.classList.add('open');
+      if (event === 'SIGNED_OUT') {
+        if (!userLoggedOut) dbBanner('СЕССИЯ ЗАВЕРШЕНА без вашего выхода (событие SIGNED_OUT).\nПришлите этот текст администратору.');
+        userLoggedOut = false;
+        overlay.classList.add('open');
+      }
+      if (event === 'TOKEN_REFRESHED') console.info('[auth] токен обновлён');
     });
 
     client.auth.getSession().then(function (r) {
       if (r && r.data && r.data.session) enterApp();
+      else overlay.classList.add('open');
     });
   }
 
