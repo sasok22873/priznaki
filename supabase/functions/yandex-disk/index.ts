@@ -291,6 +291,19 @@ Deno.serve(async (req: Request) => {
         return json(200, { ok: true, path: to });
       }
 
+      case "public-url": {
+        // Публичная ссылка на файл в самом облаке (открывается в Яндекс.Диске)
+        const path = String(payload.path || "");
+        if (!/^disk:\/ПБ24(\/|$)/.test(path)) return json(400, { error: "Недопустимый путь" });
+        const pub = await diskFetch(`/resources/publish?path=${encodeURIComponent(path)}`, { method: "PUT" });
+        if (!pub.ok && pub.status !== 409) return json(pub.status, { error: "Не удалось опубликовать файл" });
+        const meta = await diskFetch(`/resources?path=${encodeURIComponent(path)}&fields=public_url`);
+        if (!meta.ok) return json(meta.status, { error: "Не удалось получить ссылку" });
+        const data = await meta.json();
+        if (!data.public_url) return json(404, { error: "Ссылка не найдена" });
+        return json(200, { url: data.public_url });
+      }
+
       case "delete": {
         const path = String(payload.path || "");
         const { data: row } = await admin.from("bank_files").select("uploaded_by").eq("yandex_path", path).maybeSingle();
