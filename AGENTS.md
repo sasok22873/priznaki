@@ -27,10 +27,17 @@
 - Храним имя иконки в колонках `icon` таблиц `directions`, `tasks`, `goals`, `projects`. Пустая строка = без иконки.
 - Новые иконки добавляются только в `icons.js`; имена латиницей kebab-case.
 
+## Банк и Яндекс.Диск
+- Файлы физически лежат в Яндекс.Диске, в базе только карточки (`bank_files`: путь, имя, тип, размер, папка, автор, превью).
+- **Client secret не попадает в браузер и репозиторий** — только в секреты Supabase (`YANDEX_CLIENT_ID`, `YANDEX_CLIENT_SECRET`).
+- **Токены Диска** — таблица `yandex_tokens`, RLS без политик, доступ только у `service_role` внутри Edge Function.
+- Браузер получает только временные ссылки на загрузку/скачивание через Edge Function `yandex-disk`; прямых запросов к API Диска с токеном из браузера нет.
+- Интерфейс — `bank-ui.js`; старую разметку банка не трогаем, она скрыта.
+
 ## Жёсткие правила
 1. Ключ `service_role` никогда не попадает в браузерный код, `config.js`, коммит, README, скриншот или чат. Он живёт только в секретах Supabase.
 2. Перед любым SQL, меняющим RLS, — резервная копия базы.
-3. Порядок SQL строгий: 1) `team-access-migration.sql`, 2) `supabase/migrations/20261108_team_approval.sql`, 3) `supabase/migrations/20261108_delete_member.sql`, 4) `supabase/migrations/20261108_icons.sql`.
+3. Порядок SQL строгий: 1) `team-access-migration.sql`, 2) `supabase/migrations/20261108_team_approval.sql`, 3) `supabase/migrations/20261108_delete_member.sql`, 4) `supabase/migrations/20261108_icons.sql`, 5) `supabase/migrations/20261108_bank_yandex.sql`.
 4. `index.html` не переписываем целиком — только точечные правки. Строки там огромные, поэтому правим по уникальному фрагменту, а не по номеру строки.
 5. Перед отдачей файла: `node --check supabase-layer.js` и проверка консоли браузера (F12 → Console, красных строк нет).
 6. Не выдумывать имена функций, таблиц и полей. Не уверен — смотри файлы.
