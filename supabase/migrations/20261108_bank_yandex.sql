@@ -36,7 +36,7 @@ create policy bank_files_team_read on public.bank_files
 drop policy if exists bank_files_team_insert on public.bank_files;
 create policy bank_files_team_insert on public.bank_files
   for insert to authenticated
-  with check (public.current_team_role() in ('owner', 'member'));
+  with check (public.current_team_role() in ('owner', 'member') and uploaded_by = auth.uid());
 
 drop policy if exists bank_files_manage on public.bank_files;
 create policy bank_files_manage on public.bank_files
