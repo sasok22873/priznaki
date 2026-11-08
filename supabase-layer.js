@@ -46,7 +46,8 @@
       due_date: g.date || null,
       budget_planned: Number(g.budgetAmount) > 0 ? Number(g.budgetAmount) : null,
       budget_state: g.budgetState || 'planned',
-      pct: Number(g.pct) || 0
+      pct: Number(g.pct) || 0,
+      icon: g.icon || ''
     };
   }
 
@@ -60,6 +61,7 @@
       budgetAmount: r.budget_planned || '',
       budgetState: r.budget_state || 'planned',
       pct: Number(r.pct) || 0,
+      icon: r.icon || '',
       projects: 0
     };
   }
@@ -73,7 +75,8 @@
       due_date: p.date || null,
       budget_planned: Number(p.budgetAmount) > 0 ? Number(p.budgetAmount) : null,
       budget_state: p.budgetState || 'planned',
-      pct: Number(p.pct) || 0
+      pct: Number(p.pct) || 0,
+      icon: p.icon || ''
     };
   }
 
@@ -87,7 +90,8 @@
       date: r.due_date || '',
       budgetAmount: r.budget_planned || '',
       budgetState: r.budget_state || 'planned',
-      pct: Number(r.pct) || 0
+      pct: Number(r.pct) || 0,
+      icon: r.icon || ''
     };
   }
 
@@ -326,6 +330,40 @@
   }
 
   const dirSnap = new Map();
+  const areaIcons = {};
+  window.areaIcons = areaIcons;
+
+  function dirIcon(name) { return areaIcons[name] || ''; }
+
+  async function writeDirection(name, icon) {
+    const existing = dirSnap.get(name);
+    const value = icon || '';
+    if (existing) {
+      if ((existing.icon || '') !== value) {
+        const { error } = await client.from('directions').update({ icon: value }).eq('id', existing.id);
+        if (error) return { error: error };
+        existing.icon = value;
+      }
+      areaIcons[name] = value;
+      return { data: existing };
+    }
+    const { data, error } = await client.from('directions').insert({ name: name, icon: value }).select().single();
+    if (error) return { error: error };
+    dirSnap.set(name, { id: data.id, icon: value });
+    areaIcons[name] = value;
+    return { data: data };
+  }
+
+  // Создание направления из карточки (владелец). Обновляет локальное состояние.
+  window.saveDirection = async function (name, icon) {
+    if (!client || !currentProfile) return { error: { message: 'Нет активной сессии' } };
+    const clean = String(name || '').trim();
+    if (!clean) return { error: { message: 'Введите название направления' } };
+    const res = await writeDirection(clean, String(icon || '').trim());
+    if (res.error) return { error: res.error };
+    if (areas.indexOf(clean) === -1) areas.push(clean);
+    return { data: { name: clean, icon: String(icon || '').trim() } };
+  };
 
   async function loadDirections() {
     const { data, error } = await client.from('directions').select('*').order('created_at', { ascending: true });
@@ -334,35 +372,35 @@
       return;
     }
     dirSnap.clear();
+    Object.keys(areaIcons).forEach(function (k) { delete areaIcons[k]; });
     if (!data || !data.length) {
       for (const name of areas.slice()) {
-        const { data: row, error: e2 } = await client.from('directions').insert({ name: name }).select().single();
-        if (e2) { dbBanner('ЗАПИСЬ направления отклонена\n' + (e2.message || '') + '\ncode=' + (e2.code || '-')); continue; }
-        dirSnap.set(row.name, row.id);
+        const res = await writeDirection(name, areaIcons[name] || '');
+        if (res.error) { dbBanner('ЗАПИСЬ направления отклонена\n' + (res.error.message || '') + '\ncode=' + (res.error.code || '-')); }
       }
       return;
     }
     areas.length = 0;
     data.forEach(function (r) {
       areas.push(r.name);
-      dirSnap.set(r.name, r.id);
+      dirSnap.set(r.name, { id: r.id, icon: r.icon || '' });
+      if (r.icon) areaIcons[r.name] = r.icon;
     });
   }
 
   async function saveDirections() {
     const names = new Set(areas);
     for (const entry of Array.from(dirSnap.entries())) {
-      const name = entry[0], id = entry[1];
+      const name = entry[0], row = entry[1];
       if (names.has(name)) continue;
-      const { error } = await client.from('directions').delete().eq('id', id);
+      const { error } = await client.from('directions').delete().eq('id', row.id);
       if (error) { dbBanner('УДАЛЕНИЕ направления отклонено\n' + (error.message || '')); continue; }
       dirSnap.delete(name);
+      delete areaIcons[name];
     }
     for (const name of areas.slice()) {
-      if (dirSnap.has(name)) continue;
-      const { data, error } = await client.from('directions').insert({ name: name }).select().single();
-      if (error) { dbBanner('ЗАПИСЬ направления отклонена\n' + (error.message || '') + '\ncode=' + (error.code || '-')); continue; }
-      dirSnap.set(name, data.id);
+      const res = await writeDirection(name, dirIcon(name));
+      if (res.error) { dbBanner('ЗАПИСЬ направления отклонена\n' + (res.error.message || '') + '\ncode=' + (res.error.code || '-')); }
     }
   }
 
@@ -449,6 +487,7 @@
       status: STATUS_FROM_DB[r.status] || 'Новая',
       budgetAmount: r.budget_planned || '',
       budgetState: Number(r.budget_planned) > 0 ? 'planned' : '',
+      icon: r.icon || '',
       attachments: []
     };
   }
@@ -465,7 +504,8 @@
       due_date: t.date || null,
       priority: PRIORITY_TO_DB[t.priority] || 'medium',
       status: STATUS_TO_DB[t.status] || 'new',
-      budget_planned: Number(t.budgetAmount) > 0 ? Number(t.budgetAmount) : null
+      budget_planned: Number(t.budgetAmount) > 0 ? Number(t.budgetAmount) : null,
+      icon: t.icon || ''
     };
     return row;
   }
