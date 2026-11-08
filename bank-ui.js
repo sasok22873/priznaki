@@ -35,7 +35,10 @@
     album: null,
     albumName: '',
     page: {},
-    folderMeta: {}
+    folderMeta: {},
+    busyTab: '',
+    warmed: false,
+    inflight: {}
   };
 
   const css = document.createElement('style');
@@ -260,24 +263,58 @@
 
   async function listFolder(path) {
     if (state.cache[path]) return state.cache[path];
-    const res = await callFn({ action: 'list', path: path });
-    const all = (res.error ? [] : (res.data.items || []));
-    const entry = {
-      files: all.filter(function (it) { return it.type === 'file'; }),
-      dirs: all.filter(function (it) { return it.type === 'dir'; })
-    };
-    state.cache[path] = entry;
-    return entry;
+    if (!state.inflight) state.inflight = {};
+    if (state.inflight[path]) return state.inflight[path];
+    const job = (async function () {
+      const res = await callFn({ action: 'list', path: path });
+      const all = (res.error ? [] : (res.data.items || []));
+      const entry = {
+        files: all.filter(function (it) { return it.type === 'file'; }),
+        dirs: all.filter(function (it) { return it.type === 'dir'; })
+      };
+      state.cache[path] = entry;
+      delete state.inflight[path];
+      return entry;
+    })();
+    state.inflight[path] = job;
+    return job;
   }
 
   async function albumInfo(dir) {
     if (state.albumCache[dir.path]) return state.albumCache[dir.path];
-    const res = await listFolder(dir.path);
+    if (!state.cache[dir.path]) await listFolderMany([dir.path]);
+    return albumInfoFromCache(dir);
+  }
+
+  function albumInfoFromCache(dir) {
+    if (state.albumCache[dir.path]) return state.albumCache[dir.path];
+    const res = state.cache[dir.path] || { files: [], dirs: [] };
     const photos = res.files.filter(function (f) { return kindOfFile(f.name, f.mime) === 'photos'; });
     const coverItem = photos.find(function (f) { return !!f.preview; }) || res.files.find(function (f) { return !!f.preview; }) || null;
     const info = { dir: dir, files: res.files, photos: photos, cover: coverItem ? coverItem.preview : '', coverPath: coverItem ? coverItem.path : '', count: photos.length || res.files.length };
     state.albumCache[dir.path] = info;
     return info;
+  }
+
+  // Один запрос на много папок: сильно ускоряет альбомы и «Все файлы».
+  async function listFolderMany(paths) {
+    const need = (paths || []).filter(function (p) { return p && !state.cache[p]; });
+    if (!need.length) return;
+    if (!state.inflight) state.inflight = {};
+    const key = 'browse:' + need.slice().sort().join('|');
+    if (state.inflight[key]) return state.inflight[key];
+    const job = (async function () {
+      const r = await callFn({ action: 'browse', paths: need });
+      const lists = (r.data && r.data.lists) || {};
+      need.forEach(function (p) {
+        const v = lists[p];
+        if (v && !v.error) state.cache[p] = { files: v.files || [], dirs: v.dirs || [] };
+        else state.cache[p] = { files: [], dirs: [] };
+      });
+      delete state.inflight[key];
+    })();
+    state.inflight[key] = job;
+    return job;
   }
 
   // ---------- загрузка ----------
@@ -722,21 +759,8 @@
   async function albumsHTML(dirs) {
     if (!dirs || !dirs.length) return '';
     await loadFolderMeta(dirs);
-    const infos = [];
-    const queue = dirs.slice();
-    const workers = [];
-    for (let w = 0; w < 3; w++) {
-      workers.push((async function () {
-        while (queue.length) {
-          const d = queue.shift();
-          infos.push(await albumInfo(d));
-        }
-      })());
-    }
-    await Promise.all(workers);
-    const order = {};
-    dirs.forEach(function (d, i) { order[d.path] = i; });
-    infos.sort(function (a, b) { return order[a.dir.path] - order[b.dir.path]; });
+    await listFolderMany(dirs.map(function (d) { return d.path; }));
+    const infos = dirs.map(function (d) { return albumInfoFromCache(d); });
     return '<div class="pb-bank-grid">' + infos.map(albumCard).join('') + '</div>';
   }
 
@@ -864,11 +888,16 @@
       const rootRes = await listFolder(ROOT);
       let items = rootRes.files.slice();
       let albums = [];
+      const stdPaths = [];
       for (const n of Object.keys(FOLDERS).map(function (k) { return FOLDERS[k]; })) {
         if (folders.indexOf(n) === -1) continue;
-        const sub = await listFolder(ROOT + '/' + n);
+        stdPaths.push(ROOT + '/' + n);
+      }
+      await listFolderMany(stdPaths);
+      for (const p of stdPaths) {
+        const sub = await listFolder(p);
         for (const d of sub.dirs) albums.push(d);
-        for (const it of sub.files) { it.folderName = n; items.push(it); }
+        for (const it of sub.files) { it.folderName = p.split('/').pop(); items.push(it); }
       }
       await loadMeta(items);
       state.allItems = items;
@@ -1030,11 +1059,33 @@
     const tab = tabOverride || currentTab();
     const now = Date.now();
     if (!force && state.reqTab === tab && now - (state.reqAt || 0) < 1500) return renderChain;
+    if (!force && state.busyTab === tab) return renderChain;
     state.reqTab = tab;
     state.reqAt = now;
-    const next = renderChain.then(function () { return renderInner(force, tab); }).catch(function (e) { console.warn('[bank] render', e); });
+    state.busyTab = tab;
+    const next = renderChain.then(function () { return renderInner(force, tab); }).catch(function (e) { console.warn('[bank] render', e); }).then(function () {
+      if (state.busyTab === tab) state.busyTab = '';
+    });
     renderChain = next;
     return next;
+  }
+
+  // прогреваем папки в фоне, чтобы вкладки открывались мгновенно
+  function warmUp() {
+    if (state.warmed) return;
+    state.warmed = true;
+    setTimeout(function () {
+      const paths = [ROOT].concat(Object.keys(FOLDERS).map(function (k) { return ROOT + '/' + FOLDERS[k]; }));
+      listFolderMany(paths).then(function () {
+        // второй проход: обложки альбомов (подпапки стандартных разделов)
+        const dirs = [];
+        paths.forEach(function (p) {
+          const entry = state.cache[p];
+          if (entry && entry.dirs) entry.dirs.forEach(function (d) { dirs.push(d.path); });
+        });
+        if (dirs.length) return listFolderMany(dirs);
+      }).catch(function () { });
+    }, 700);
   }
 
   async function renderInner(force, tabOverride) {
@@ -1055,6 +1106,7 @@
     host.innerHTML = (state.notice ? '<div class="pb-bank-notice">' + esc(state.notice) + '</div>' : '') + toolbar();
     if (tab === 'cloud') await renderCloudTab(tab);
     else await decorateTab(tab);
+    warmUp();
   }
 
   // ---------- публичные обработчики ----------
@@ -1143,4 +1195,14 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { watchBankContent(); onBankChanged(); });
   else { watchBankContent(); onBankChanged(); }
+
+  // Тихо прогреваем папки Банка в фоне после входа — вкладки открываются мгновенно.
+  setTimeout(function () {
+    (async function () {
+      try {
+        if (!state.connected) await loadStatus();
+        if (state.connected) warmUp();
+      } catch (e) { }
+    })();
+  }, 2500);
 })();
