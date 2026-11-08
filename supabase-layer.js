@@ -483,55 +483,93 @@
     document.getElementById('logoutBtn').onclick = logout;
   }
 
+  let entering = false;
+
+  function profileErrorText(error) {
+    const code = error && error.code;
+    if (code === 'PGRST116') return 'Профиль не найден. Попросите владельца группы проверить ваш доступ.';
+    if (code === '42501') return 'База отклонила чтение профиля (нет прав). Войдите заново или обратитесь к владельцу.';
+    if (code === '42703') return 'В базе нет нужных колонок: не применена SQL-миграция. Обратитесь к администратору.';
+    const msg = (error && (error.message || error.error_description)) || 'неизвестная ошибка';
+    return 'Не удалось загрузить профиль: ' + msg;
+  }
+
+  function storedSessionExists() {
+    try {
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (k && k.indexOf('-auth-token') !== -1) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
   async function enterApp() {
-    const sess = await client.auth.getSession();
-    const user = sess && sess.data && sess.data.session && sess.data.session.user;
-    if (!user) { overlay.classList.add('open'); return; }
+    if (entering) return;
+    entering = true;
+    try {
+      const sess = await client.auth.getSession();
+      const user = sess && sess.data && sess.data.session && sess.data.session.user;
+      if (!user) { overlay.classList.add('open'); return; }
 
-    const { data: prof, error } = await client
-      .from('profiles')
-      .select('id, full_name, role, bio, avatar_url, email, access_status')
-      .eq('id', user.id)
-      .single();
+      const { data: prof, error } = await client
+        .from('profiles')
+        .select('id, full_name, role, bio, avatar_url, email, access_status')
+        .eq('id', user.id)
+        .single();
 
-    if (error || !prof) {
-      console.error('profile', error);
-      overlay.classList.add('open');
-      showError('Профиль не найден. Попросите владельца группы проверить ваш доступ.');
-      return;
-    }
-
-    if (prof.access_status && prof.access_status !== 'active') {
-      overlay.classList.add('open');
-      if (prof.access_status === 'invited') {
-        document.getElementById('authForm').hidden = true;
-        document.getElementById('authFoot').hidden = true;
-        document.getElementById('pendingPasswordForm').hidden = false;
+      if (error || !prof) {
+        console.error('[auth] profile', error);
+        overlay.classList.add('open');
+        showError(profileErrorText(error));
         return;
       }
-      userLoggedOut = true;
-      await client.auth.signOut();
-      userLoggedOut = false;
-      showError('Доступ отозван владельцем. Обратитесь к владельцу.');
-      return;
-    }
-    currentProfile = prof;
-    window.__CURRENT_PROFILE__ = prof;
-    overlay.classList.remove('open');
-    renderWhoami();
-    await loadAll();
-    window.renderAll && window.renderAll();
-    window.persist = saveAll;
 
+      const status = String(prof.access_status || 'active');
+      if (status !== 'active') {
+        overlay.classList.add('open');
+        if (status === 'invited') {
+          document.getElementById('authForm').hidden = true;
+          document.getElementById('authFoot').hidden = true;
+          document.getElementById('pendingPasswordForm').hidden = false;
+          return;
+        }
+        userLoggedOut = true;
+        try { await client.auth.signOut(); } catch (e) {}
+        userLoggedOut = false;
+        showError('Доступ отозван владельцем. Обратитесь к владельцу.');
+        return;
+      }
+
+      currentProfile = prof;
+      window.__CURRENT_PROFILE__ = prof;
+      overlay.classList.remove('open');
+      clearError();
+      renderWhoami();
+      await loadAll();
+      window.renderAll && window.renderAll();
+      window.persist = saveAll;
+    } catch (e) {
+      console.error('[auth] enterApp', e);
+      overlay.classList.add('open');
+      showError('Не удалось загрузить приложение: ' + ((e && e.message) || e));
+    } finally {
+      entering = false;
+    }
   }
 
   async function logout() {
     userLoggedOut = true;
-    if (client) await client.auth.signOut();
+    try { if (client) await client.auth.signOut(); } catch (e) { console.error('[auth] signOut', e); }
     currentProfile = null;
+    window.__CURRENT_PROFILE__ = null;
     TABLES.forEach(function (c) { snaps[c.table].clear(); });
-    const arr = getTasks();
-    if (arr.length) arr.length = 0;
+    [getTasks, getGoals, getProjects, getEvents, getMoney, getMembers].forEach(function (getter) {
+      try { const arr = getter(); if (arr && arr.length) arr.length = 0; } catch (e) {}
+    });
+    teamProfiles.length = 0;
+    const box = document.getElementById('whoamiBox');
+    if (box && box.parentNode) box.parentNode.removeChild(box);
     window.renderAll && window.renderAll();
     overlay.classList.add('open');
     clearError();
@@ -559,20 +597,27 @@
       e.preventDefault();
       clearError();
       const btn = document.getElementById('authSubmit');
-      btn.disabled = true;
-      btn.textContent = 'Входим…';
       const email = document.getElementById('authEmail').value.trim();
       const pass = document.getElementById('authPass').value;
-      const res = await client.auth.signInWithPassword({ email: email, password: pass });
-      btn.disabled = false;
-      btn.textContent = 'Войти';
-      if (res.error) {
-        showError(res.error.message === 'Invalid login credentials'
-          ? 'Неверная почта или пароль.'
-          : 'Не удалось войти: ' + res.error.message);
-        return;
+      btn.disabled = true;
+      btn.textContent = 'Входим…';
+      try {
+        const res = await client.auth.signInWithPassword({ email: email, password: pass });
+        if (res && res.error) {
+          const m = res.error.message || '';
+          showError(m === 'Invalid login credentials' ? 'Неверная почта или пароль.'
+            : m === 'Email not confirmed' ? 'Почта не подтверждена. Обратитесь к владельцу группы.'
+            : 'Не удалось войти: ' + m);
+          return;
+        }
+        await enterApp();
+      } catch (err) {
+        console.error('[auth] signIn', err);
+        showError('Сеть недоступна или сервер не ответил. Проверьте интернет и попробуйте снова.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Войти';
       }
-      await enterApp();
     });
 
     document.getElementById('pendingPasswordForm').addEventListener('submit', async function (e) {
@@ -583,11 +628,17 @@
       if (password.length < 8) { errBox.textContent = 'Пароль должен содержать не менее 8 символов.'; return; }
       btn.disabled = true;
       errBox.textContent = '';
-      const result = await client.auth.updateUser({ password: password });
-      btn.disabled = false;
-      if (result.error) { errBox.textContent = 'Не удалось задать пароль: ' + result.error.message; return; }
+      try {
+        const result = await client.auth.updateUser({ password: password });
+        if (result && result.error) { errBox.textContent = 'Не удалось задать пароль: ' + result.error.message; return; }
+      } catch (err) {
+        errBox.textContent = 'Сеть недоступна: ' + ((err && err.message) || err);
+        return;
+      } finally {
+        btn.disabled = false;
+      }
       userLoggedOut = true;
-      await client.auth.signOut();
+      try { await client.auth.signOut(); } catch (err) {}
       userLoggedOut = false;
       document.getElementById('pendingPasswordForm').hidden = true;
       document.getElementById('authForm').hidden = false;
@@ -595,19 +646,37 @@
       showError('Пароль задан. Теперь дождитесь одобрения владельца; после одобрения войдите с этим паролем.');
     });
 
-    client.auth.onAuthStateChange(function (event) {
+    client.auth.onAuthStateChange(function (event, session) {
       if (event === 'SIGNED_OUT') {
-        if (!userLoggedOut) dbBanner('СЕССИЯ ЗАВЕРШЕНА без вашего выхода (событие SIGNED_OUT).\nПришлите этот текст администратору.');
+        if (!userLoggedOut) {
+          console.warn('[auth] сессия завершена без выхода пользователя');
+          showError('Сессия истекла — войдите снова.');
+        }
         userLoggedOut = false;
+        currentProfile = null;
+        window.__CURRENT_PROFILE__ = null;
         overlay.classList.add('open');
       }
+      if (event === 'SIGNED_IN' && !currentProfile && !entering) { enterApp(); }
       if (event === 'TOKEN_REFRESHED') console.info('[auth] токен обновлён');
     });
 
-    client.auth.getSession().then(function (r) {
-      if (r && r.data && r.data.session) enterApp();
-      else overlay.classList.add('open');
-    });
+    // Восстановление сессии при загрузке страницы: пробуем дважды, если в
+    // хранилище есть след сессии, — это спасает от разовых сбоев чтения.
+    async function restoreSession(attempt) {
+      try {
+        const r = await client.auth.getSession();
+        if (r && r.data && r.data.session) { await enterApp(); return; }
+      } catch (err) {
+        console.error('[auth] getSession', err);
+      }
+      if (attempt === 0 && storedSessionExists()) {
+        await new Promise(function (res) { setTimeout(res, 400); });
+        return restoreSession(1);
+      }
+      overlay.classList.add('open');
+    }
+    restoreSession(0);
   }
 
   if (document.readyState === 'loading') {
