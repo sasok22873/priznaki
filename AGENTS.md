@@ -21,10 +21,16 @@
 - Переходы 140–220 мс, `cubic-bezier(.2,.7,.2,1)`. Обязательно `@media (prefers-reduced-motion: reduce)`.
 - Мобильный вид — не «уменьшенный десктоп»: ≤900 px сайдбар превращается в нижний dock, ≤700 таблицы — в карточки.
 
+## Иконки
+- Набор из 137 SVG лежит в `icons.js` (`window.PB_ICONS`, только внутренняя разметка `viewBox="0 0 24 24"`).
+- Логика выбора и показа — `icons-ui.js`: `pbIcon(name)`, `directionTileIcon(area)`, выбор через модалку `#pbIconPicker`.
+- Храним имя иконки в колонках `icon` таблиц `directions`, `tasks`, `goals`, `projects`. Пустая строка = без иконки.
+- Новые иконки добавляются только в `icons.js`; имена латиницей kebab-case.
+
 ## Жёсткие правила
 1. Ключ `service_role` никогда не попадает в браузерный код, `config.js`, коммит, README, скриншот или чат. Он живёт только в секретах Supabase.
 2. Перед любым SQL, меняющим RLS, — резервная копия базы.
-3. Порядок SQL строгий: 1) `team-access-migration.sql`, 2) `supabase/migrations/20261108_team_approval.sql`, 3) `supabase/migrations/20261108_delete_member.sql`.
+3. Порядок SQL строгий: 1) `team-access-migration.sql`, 2) `supabase/migrations/20261108_team_approval.sql`, 3) `supabase/migrations/20261108_delete_member.sql`, 4) `supabase/migrations/20261108_icons.sql`.
 4. `index.html` не переписываем целиком — только точечные правки. Строки там огромные, поэтому правим по уникальному фрагменту, а не по номеру строки.
 5. Перед отдачей файла: `node --check supabase-layer.js` и проверка консоли браузера (F12 → Console, красных строк нет).
 6. Не выдумывать имена функций, таблиц и полей. Не уверен — смотри файлы.
