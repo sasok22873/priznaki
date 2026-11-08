@@ -417,7 +417,10 @@
     '.auth-foot{font:12px/1.4 "Segoe UI",Arial,sans-serif;color:#8d8898;margin:16px 0 0}',
     '.whoami{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;font:11px "Segoe UI",Arial,sans-serif;color:#a8a3b3}',
     '.whoami b{color:#e4d7ff}',
-    '.whoami button{border:0;background:transparent;color:#b39aff;text-decoration:underline;font-size:11px;cursor:pointer;padding:0}'
+    '.whoami button{border:0;background:transparent;color:#b39aff;text-decoration:underline;font-size:11px;cursor:pointer;padding:0}',
+    '#whoamiBox{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap}',
+    '#whoamiBox span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '#whoamiBox button{align-self:center;flex:0 0 auto;margin:0;padding:0;white-space:nowrap}'
   ].join('');
   document.head.appendChild(style);
 
@@ -479,7 +482,9 @@
     }
     const labels = { owner: 'владелец', member: 'участник', viewer: 'только просмотр' };
     const role = labels[currentProfile.role] || currentProfile.role;
-    box.innerHTML = '<span>Вы: <b>' + (currentProfile.full_name || 'без имени') + '</b> · ' + role + '</span><button id="logoutBtn">выйти</button>';
+    const name = currentProfile.full_name || 'без имени';
+    const showRole = String(name).toLowerCase() !== String(role).toLowerCase();
+    box.innerHTML = '<span>Вы: <b>' + name + '</b>' + (showRole ? ' · ' + role : '') + '</span><button id="logoutBtn">выйти</button>';
     document.getElementById('logoutBtn').onclick = logout;
   }
 
