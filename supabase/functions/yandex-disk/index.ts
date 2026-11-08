@@ -235,9 +235,13 @@ Deno.serve(async (req: Request) => {
 
       case "mkdir": {
         if (!canWrite) return json(403, { error: "Создавать папки может владелец или участник" });
-        const name = String(payload.name || "").trim().replace(/[\\/]+/g, " ").slice(0, 80);
-        if (!name) return json(400, { error: "Введите название папки" });
-        const path = `disk:/ПБ24/${name}`;
+        const relRaw = String(payload.path || payload.name || "").trim();
+        const segments = relRaw
+          .split(/[\\/]+/)
+          .map((s) => s.trim().replace(/[<>:"|?*]+/g, " ").slice(0, 60))
+          .filter(Boolean);
+        if (!segments.length) return json(400, { error: "Введите название папки" });
+        const path = "disk:/ПБ24/" + segments.join("/");
         const res = await diskFetch(`/resources?path=${encodeURIComponent(path)}`, { method: "PUT" });
         if (res.status === 201) return json(200, { ok: true, path });
         if (res.status === 409) return json(409, { error: "Папка уже есть" });
