@@ -307,7 +307,12 @@ Deno.serve(async (req: Request) => {
       case "delete": {
         const path = String(payload.path || "");
         const { data: row } = await admin.from("bank_files").select("uploaded_by").eq("yandex_path", path).maybeSingle();
-        const mayDelete = isOwner || (row && row.uploaded_by === userId);
+        let mayDelete = !!(isOwner || (row && row.uploaded_by === userId));
+        if (!mayDelete) {
+          // папку может удалить тот, кто её создал
+          const { data: folder } = await admin.from("bank_folders").select("created_by").eq("yandex_path", path).maybeSingle();
+          mayDelete = !!(isOwner || (folder && folder.created_by === userId));
+        }
         if (!canWrite) return json(403, { error: "Удалять файлы может владелец или участник" });
         if (!mayDelete) return json(403, { error: "Удалить может автор или владелец" });
         const res = await diskFetch(`/resources?path=${encodeURIComponent(path)}&permanently=true`, { method: "DELETE" });
