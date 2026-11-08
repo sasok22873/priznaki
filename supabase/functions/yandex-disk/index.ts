@@ -207,6 +207,32 @@ Deno.serve(async (req: Request) => {
         return json(200, { items, path });
       }
 
+      case "browse": {
+        // Один запрос вместо многих: сразу списки нескольких папок (для альбомов и «Все файлы»)
+        const paths = Array.isArray(payload.paths) ? (payload.paths as unknown[]).slice(0, 40) : [];
+        const out: Record<string, unknown> = {};
+        const valid = paths.map((p) => String(p || "")).filter((p) => /^disk:\/ПБ24(\/|$)/.test(p));
+        // Параллельно, но с ограничением — Яндекс не любит шквал запросов
+        const LIMIT = 8;
+        let cursor = 0;
+        async function worker() {
+          while (cursor < valid.length) {
+            const p = valid[cursor++];
+            const res = await diskFetch(`/resources?path=${encodeURIComponent(p)}&limit=200&sort=name&preview_size=M`);
+            if (res.status === 404) { out[p] = { files: [], dirs: [], missing: true }; continue; }
+            if (!res.ok) { out[p] = { error: true }; continue; }
+            const data = await res.json();
+            const items = (data._embedded?.items || []).map(mapItem);
+            out[p] = {
+              files: items.filter((i: { type: string }) => i.type === "file"),
+              dirs: items.filter((i: { type: string }) => i.type === "dir"),
+            };
+          }
+        }
+        await Promise.all(Array.from({ length: Math.min(LIMIT, valid.length) }, () => worker()));
+        return json(200, { lists: out });
+      }
+
       case "upload-link": {
         if (!canWrite) return json(403, { error: "Загружать файлы может владелец или участник" });
         const path = String(payload.path || "");
