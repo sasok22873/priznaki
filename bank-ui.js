@@ -170,7 +170,7 @@
     try {
       if (!dirs || !dirs.length || !window.supabaseClient) return;
       const paths = dirs.map(function (d) { return d.path; });
-      const { data } = await window.supabaseClient.from('bank_folders').select('yandex_path, icon, name').in('yandex_path', paths);
+      const { data } = await window.supabaseClient.from('bank_folders').select('yandex_path, icon, name, created_by').in('yandex_path', paths);
       (data || []).forEach(function (r) { state.folderMeta[r.yandex_path] = r; });
     } catch (e) { }
   }
@@ -725,6 +725,9 @@
     if (!confirm('Удалить «' + item.name + '» из облака? Файл удалится навсегда.')) return;
     const r = await callFn({ action: 'delete', path: item.path });
     if (r.error) { toast(r.error.message); return; }
+    try {
+      if (window.supabaseClient) await window.supabaseClient.from('bank_files').delete().eq('yandex_path', item.path);
+    } catch (e) { }
     state.cache = {};
     state.albumCache = {};
     state.metaMap = {};
@@ -927,7 +930,10 @@
       ? '<img src="' + esc(info.cover || '') + '" data-preview="' + esc(info.cover || '') + '" data-thumb="' + esc(info.coverPath) + '" alt="" loading="lazy" referrerpolicy="no-referrer">'
       : icon(iconName || 'images', 'pb-icon-lg');
     const badge = iconName ? '<span class="pb-album-badge">' + icon(iconName, 'pb-icon-sm') + '</span>' : '';
-    const del = state.isOwner
+    const me = window.__CURRENT_PROFILE__ || {};
+    const folderRow = state.folderMeta && state.folderMeta[info.dir.path];
+    const canDeleteFolder = state.isOwner || (folderRow && folderRow.created_by && me.id && folderRow.created_by === me.id);
+    const del = canDeleteFolder
       ? '<button class="btn tiny ghost" type="button" data-bank-rmdir="' + esc(info.dir.path) + '">Удалить</button>'
       : '';
     return '<div class="pb-bank-card">' +
