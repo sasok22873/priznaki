@@ -376,7 +376,7 @@
       const csv = '\ufeff' + head.join(';') + '\r\n' + rows.join('\r\n');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-      a.download = 'zadachi-' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.download = 'zadachi-' + new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Krasnoyarsk' }).format(new Date()) + '.csv';
       document.body.appendChild(a); a.click(); a.remove();
       if (typeof window.toast === 'function') window.toast('Задачи выгружены в CSV');
     } catch (e) { console.warn('[export]', e); }
