@@ -145,19 +145,110 @@
     };
   }
 
+  function memberToRow(m) {
+    return { name: m.name || '', login: m.login || '', role: m.role || '', access: m.access || '', state: m.state || '', bio: m.bio || '', avatar_url: m.avatar_url || '' };
+  }
+
+  function rowToMember(r) {
+    return { id: r.id, name: r.name || '', login: r.login || '', role: r.role || '', access: r.access || '', state: r.state || '', bio: r.bio || '', avatar_url: r.avatar_url || '' };
+  }
+
+  function getMembers() { try { return members; } catch (e) { return []; } }
+
   function getEvents() { try { return events; } catch (e) { return []; } }
   function getMoney()  { try { return money; }  catch (e) { return []; } }
 
   function getGoals()    { try { return goals; }    catch (e) { return []; } }
   function getProjects() { try { return projects; } catch (e) { return []; } }
 
+  const teamProfiles = [];
+  window.teamProfiles = teamProfiles;
+
+  async function loadTeamProfiles() {
+    const { data, error } = await client.from('profiles').select('id, full_name, role, bio, avatar_url, email, access_status').order('full_name', { ascending: true });
+    if (error) {
+      dbBanner('ЧТЕНИЕ участников: ' + (error.message || '') + '\ncode=' + (error.code || '-'));
+      return;
+    }
+    teamProfiles.length = 0;
+    (data || []).forEach(function (p) { teamProfiles.push({ id: p.id, full_name: p.full_name || '', role: p.role || '', bio: p.bio || '', avatar_url: p.avatar_url || '', email: p.email || '', access_status: p.access_status || 'active' }); });
+  }
+  window.refreshTeamProfiles = async function () { await loadTeamProfiles(); window.renderAll && window.renderAll(); return teamProfiles; };
+
+  function profileIdByName(name) {
+    const p = teamProfiles.find(function (x) { return x.full_name === name; });
+    return p ? p.id : null;
+  }
+
+  function profileNameById(id) {
+    const p = teamProfiles.find(function (x) { return x.id === id; });
+    return p ? p.full_name : '';
+  }
+
+  async function addMemberDirect(m) {
+    if (!client || !currentProfile) { dbBanner('Нет подключения к базе: участник не сохранён'); return false; }
+    if (['owner', 'member'].indexOf(currentProfile.role) === -1) {
+      dbBanner('Ваша роль: ' + (currentProfile.role || 'не задана') + '. Добавлять участников может владелец или участник');
+      return false;
+    }
+    const { data, error } = await client.from('members').insert(memberToRow(m)).select().single();
+    if (error) {
+      dbBanner('ДОБАВЛЕНИЕ участника отклонено\n' + (error.message || '') + '\ncode=' + (error.code || '-'));
+      return false;
+    }
+    m.id = data.id;
+    members.push(m);
+    snaps.members.set(data.id, JSON.stringify(memberToRow(m)));
+    return true;
+  }
+  window.addMemberDirect = addMemberDirect;
+
+  window.updateOwnProfile = async function (patch) {
+    if (!client || !currentProfile) return { error: { message: 'Нет активной сессии' } };
+    const { data, error } = await client.rpc('update_own_profile', {
+      new_full_name: patch.full_name || currentProfile.full_name || '',
+      new_bio: patch.bio || '',
+      new_avatar_url: patch.avatar_url || ''
+    });
+    if (!error) {
+      currentProfile = Object.assign({}, currentProfile, { full_name: patch.full_name || currentProfile.full_name, bio: patch.bio || '', avatar_url: patch.avatar_url || '' });
+      window.__CURRENT_PROFILE__ = currentProfile;
+      const listed = teamProfiles.find(function (p) { return p.id === currentProfile.id; });
+      if (listed) Object.assign(listed, { full_name: currentProfile.full_name, bio: currentProfile.bio, avatar_url: currentProfile.avatar_url });
+      renderWhoami();
+    }
+    return { data: currentProfile, error: error };
+  };
+  window.setTeamProfileRole = async function (profileId, role) {
+    if (!client || !currentProfile) return { error: { message: 'Нет активной сессии' } };
+    return await client.rpc('admin_set_profile_role', { target_profile_id: profileId, new_role: role });
+  };
+  window.setTeamProfileAccess = async function (profileId, accessStatus) {
+    if (!client || !currentProfile) return { error: { message: 'Нет активной сессии' } };
+    return await client.rpc('admin_set_profile_access', { target_profile_id: profileId, new_access_status: accessStatus });
+  };
+  window.updateTeamProfile = async function (profileId, patch) {
+    if (!client || !currentProfile) return { error: { message: 'Нет активной сессии' } };
+    const args = { target_profile_id: profileId, new_full_name: patch.full_name || '', new_bio: patch.bio || '', new_avatar_url: patch.avatar_url || '' };
+    const own = profileId === currentProfile.id;
+    const { error } = await client.rpc(own ? 'update_own_profile' : 'admin_update_profile', own ? {
+      new_full_name: patch.full_name || currentProfile.full_name || '', new_bio: patch.bio || '', new_avatar_url: patch.avatar_url || ''
+    } : args);
+    if (error) return { error: error };
+    const listed = teamProfiles.find(function (p) { return p.id === profileId; });
+    if (listed) Object.assign(listed, { full_name: patch.full_name || listed.full_name, bio: patch.bio || '', avatar_url: patch.avatar_url || '' });
+    if (own) { currentProfile = Object.assign({}, currentProfile, { full_name: patch.full_name || currentProfile.full_name, bio: patch.bio || '', avatar_url: patch.avatar_url || '' }); window.__CURRENT_PROFILE__ = currentProfile; renderWhoami(); }
+    return { data: listed || currentProfile, error: null };
+  };
+
   const TABLES = [
     { table: 'tasks', get: getTasks, toRow: taskToRow, fromRow: rowToTask, order: 'created_at', desc: true,
-      extra: function () { return { owner_id: currentProfile.id }; } },
+      extra: function () { return { created_by: currentProfile.id }; } },
     { table: 'goals', get: getGoals, toRow: goalToRow, fromRow: rowToGoal, order: 'created_at', desc: true },
     { table: 'projects', get: getProjects, toRow: projectToRow, fromRow: rowToProject, order: 'created_at', desc: true },
     { table: 'events', get: getEvents, toRow: eventToRow, fromRow: rowToEvent, order: 'date', desc: false },
-    { table: 'money', get: getMoney, toRow: moneyToRow, fromRow: rowToMoney, order: 'date', desc: true }
+    { table: 'money', get: getMoney, toRow: moneyToRow, fromRow: rowToMoney, order: 'date', desc: true },
+    { table: 'members', get: getMembers, toRow: memberToRow, fromRow: rowToMember, order: 'created_at', desc: true }
   ];
   const snaps = {};
   TABLES.forEach(function (c) { snaps[c.table] = new Map(); });
@@ -181,6 +272,8 @@
   }
 
   async function loadAll() {
+    await loadDirections();
+    await loadTeamProfiles();
     for (const c of TABLES) await loadTable(c);
     getGoals().forEach(function (g) {
       g.projects = getProjects().filter(function (p) { return p.goal && p.goal === g.title; }).length;
@@ -226,6 +319,47 @@
     }
   }
 
+  const dirSnap = new Map();
+
+  async function loadDirections() {
+    const { data, error } = await client.from('directions').select('*').order('created_at', { ascending: true });
+    if (error) {
+      dbBanner('ЧТЕНИЕ направлений: ' + (error.message || '') + '\ncode=' + (error.code || '-'));
+      return;
+    }
+    dirSnap.clear();
+    if (!data || !data.length) {
+      for (const name of areas.slice()) {
+        const { data: row, error: e2 } = await client.from('directions').insert({ name: name }).select().single();
+        if (e2) { dbBanner('ЗАПИСЬ направления отклонена\n' + (e2.message || '') + '\ncode=' + (e2.code || '-')); continue; }
+        dirSnap.set(row.name, row.id);
+      }
+      return;
+    }
+    areas.length = 0;
+    data.forEach(function (r) {
+      areas.push(r.name);
+      dirSnap.set(r.name, r.id);
+    });
+  }
+
+  async function saveDirections() {
+    const names = new Set(areas);
+    for (const entry of Array.from(dirSnap.entries())) {
+      const name = entry[0], id = entry[1];
+      if (names.has(name)) continue;
+      const { error } = await client.from('directions').delete().eq('id', id);
+      if (error) { dbBanner('УДАЛЕНИЕ направления отклонено\n' + (error.message || '')); continue; }
+      dirSnap.delete(name);
+    }
+    for (const name of areas.slice()) {
+      if (dirSnap.has(name)) continue;
+      const { data, error } = await client.from('directions').insert({ name: name }).select().single();
+      if (error) { dbBanner('ЗАПИСЬ направления отклонена\n' + (error.message || '') + '\ncode=' + (error.code || '-')); continue; }
+      dirSnap.set(name, data.id);
+    }
+  }
+
   function saveAll() {
     if (!currentProfile || !client) return saveQueue;
     if (['owner', 'member'].indexOf(currentProfile.role) === -1) {
@@ -234,6 +368,7 @@
     }
     saveQueue = saveQueue.then(async function () {
       for (const c of TABLES) await saveTable(c);
+      await saveDirections();
     }).catch(function (err) {
       dbBanner('СОХРАНЕНИЕ: ' + ((err && err.message) || err));
     });
@@ -254,6 +389,7 @@
     '<button class="btn red auth-submit" type="submit" id="authSubmit">Войти</button>',
     '</form>',
     '<p class="auth-foot" id="authFoot">Забыли пароль — попросите владельца группы сбросить его.</p>',
+    '<form id="pendingPasswordForm" class="auth-form" hidden><p class="auth-sub">Приглашение подтверждено. Задайте пароль, затем дождитесь, пока владелец одобрит доступ.</p><label>Новый пароль<input class="field" id="pendingPassword" type="password" minlength=8 autocomplete="new-password" required></label><div class="auth-error" id="pendingPasswordError"></div><button class="btn red auth-submit" type="submit" id="pendingPasswordSubmit">Задать пароль</button></form>',
     '</div>'
   ].join('');
   document.body.appendChild(overlay);
@@ -297,7 +433,7 @@
       description: r.description || '',
       result: r.result || '',
       note: r.note || '',
-      owner: r.owner_name || '',
+      owner: r.owner_name || profileNameById(r.owner_id),
       area: r.area || '',
       date: r.due_date || '',
       priority: PRIORITY_FROM_DB[r.priority] || 'Средний',
@@ -316,6 +452,7 @@
       note: t.note || '',
       area: t.area || '',
       owner_name: t.owner || '',
+      owner_id: profileIdByName(t.owner),
       due_date: t.date || null,
       priority: PRIORITY_TO_DB[t.priority] || 'medium',
       status: STATUS_TO_DB[t.status] || 'new',
@@ -347,7 +484,7 @@
 
     const { data: prof, error } = await client
       .from('profiles')
-      .select('id, full_name, role')
+      .select('id, full_name, role, bio, avatar_url, email, access_status')
       .eq('id', user.id)
       .single();
 
@@ -358,7 +495,22 @@
       return;
     }
 
+    if (prof.access_status && prof.access_status !== 'active') {
+      overlay.classList.add('open');
+      if (prof.access_status === 'invited') {
+        document.getElementById('authForm').hidden = true;
+        document.getElementById('authFoot').hidden = true;
+        document.getElementById('pendingPasswordForm').hidden = false;
+        return;
+      }
+      userLoggedOut = true;
+      await client.auth.signOut();
+      userLoggedOut = false;
+      showError('Доступ отозван владельцем. Обратитесь к владельцу.');
+      return;
+    }
     currentProfile = prof;
+    window.__CURRENT_PROFILE__ = prof;
     overlay.classList.remove('open');
     renderWhoami();
     await loadAll();
@@ -393,7 +545,7 @@
     }
 
     client = window.supabase.createClient(URL, KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storage: window.localStorage }
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: window.localStorage }
     });
     window.supabaseClient = client;
 
@@ -415,6 +567,26 @@
         return;
       }
       await enterApp();
+    });
+
+    document.getElementById('pendingPasswordForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const btn = document.getElementById('pendingPasswordSubmit');
+      const errBox = document.getElementById('pendingPasswordError');
+      const password = document.getElementById('pendingPassword').value;
+      if (password.length < 8) { errBox.textContent = 'Пароль должен содержать не менее 8 символов.'; return; }
+      btn.disabled = true;
+      errBox.textContent = '';
+      const result = await client.auth.updateUser({ password: password });
+      btn.disabled = false;
+      if (result.error) { errBox.textContent = 'Не удалось задать пароль: ' + result.error.message; return; }
+      userLoggedOut = true;
+      await client.auth.signOut();
+      userLoggedOut = false;
+      document.getElementById('pendingPasswordForm').hidden = true;
+      document.getElementById('authForm').hidden = false;
+      document.getElementById('authFoot').hidden = false;
+      showError('Пароль задан. Теперь дождитесь одобрения владельца; после одобрения войдите с этим паролем.');
     });
 
     client.auth.onAuthStateChange(function (event) {
