@@ -81,6 +81,8 @@
     '.pb-bank-more{display:flex;justify-content:center;margin-top:12px}',
     '.pb-album-badge{position:absolute;top:8px;left:8px;z-index:2;display:grid;place-items:center;width:26px;height:26px;border-radius:9px;background:rgba(11,11,15,.72);color:#c4b5fd;border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px)}',
     '.pb-album-badge .pb-icon{width:15px;height:15px}',
+    '.pb-card-preview{margin:0 0 14px;border-radius:12px;overflow:hidden;background:#101014;display:grid;place-items:center;max-height:260px}',
+    '.pb-card-preview img{width:100%;max-height:260px;object-fit:contain;display:block}',
     '@media (max-width:700px){.pb-bank-grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}.pb-bank-thumb{height:104px}}'
   ].join('');
   document.head.appendChild(css);
@@ -335,6 +337,184 @@
     await render(true);
   }
 
+  // ---------- карточка файла: название, заметка, иконка, текст, удаление ----------
+  let cardCtx = null;
+  let cardIcon = '';
+  function ensureFileCard() {
+    if (document.getElementById('pbFileCard')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'modal-back';
+    wrap.id = 'pbFileCard';
+    wrap.innerHTML = [
+      '<div class="modal" role="dialog" aria-modal="true" style="max-width:660px">',
+      '<div class="pb-modal-title">Карточка файла</div>',
+      '<p class="pb-modal-sub" id="pbCardMeta"></p>',
+      '<div class="pb-card-preview" id="pbCardPreview" hidden></div>',
+      '<div class="form">',
+      '<label>Название<input class="field" id="pbCardName" maxlength="140"></label>',
+      '<label>Заметка<textarea class="field" id="pbCardNote" rows="3" placeholder="Что это за файл, для чего, кому нужно"></textarea></label>',
+      '<div class="pb-icon-field"><span>Иконка карточки</span><button type="button" class="pb-icon-btn" id="pbCardIconBtn"><span class="pb-icon-preview" id="pbCardIconPreview"></span><span class="pb-icon-name" id="pbCardIconName">Выбрать иконку</span></button></div>',
+      '<div id="pbCardTextWrap" hidden><label>Содержимое текста<textarea class="field" id="pbCardText" rows="10"></textarea></label></div>',
+      '</div>',
+      '<div class="pb-modal-actions" style="justify-content:space-between">',
+      '<div><button class="btn ghost" type="button" id="pbCardCancel">Отмена</button></div>',
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">',
+      '<button class="btn ghost" type="button" id="pbCardOpen">Открыть</button>',
+      '<button class="btn ghost" type="button" id="pbCardDelete" style="display:none">Удалить</button>',
+      '<button class="btn red" type="button" id="pbCardSave">Сохранить</button>',
+      '</div></div>',
+      '</div>'
+    ].join('');
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', function (e) { if (e.target === wrap) closeFileCard(); });
+    document.getElementById('pbCardCancel').onclick = closeFileCard;
+    document.getElementById('pbCardIconBtn').onclick = function () {
+      if (typeof window.pbPickIconGlobal !== 'function') { toast('Выбор иконок недоступен'); return; }
+      window.pbPickIconGlobal('Иконка карточки', cardIcon, function (ic) { cardIcon = ic; paintCardIcon(); });
+    };
+    document.getElementById('pbCardSave').onclick = saveFileCard;
+    document.getElementById('pbCardOpen').onclick = function () { if (cardCtx) openFile(cardCtx.item); };
+    document.getElementById('pbCardDelete').onclick = deleteFromCard;
+  }
+  function paintCardIcon() {
+    const p = document.getElementById('pbCardIconPreview');
+    const n = document.getElementById('pbCardIconName');
+    if (p) p.innerHTML = icon(cardIcon || 'file');
+    if (n) n.textContent = cardIcon || 'Выбрать иконку';
+  }
+  async function openFileCard(item) {
+    ensureFileCard();
+    let row = null;
+    try {
+      const { data } = await window.supabaseClient.from('bank_files').select('*').eq('yandex_path', item.path).maybeSingle();
+      row = data;
+    } catch (e) { }
+    const me = window.__CURRENT_PROFILE__ || {};
+    cardCtx = { item: item, row: row || {}, originalName: item.name, originalText: '' };
+    cardIcon = (row && row.icon) || '';
+    const folderPath = item.path.split('/').slice(0, -1).join(' / ');
+    document.getElementById('pbCardMeta').textContent = [
+      fmtSize(item.size),
+      item.created ? fmtDate(item.created) : '',
+      (row && row.owner_name) || '',
+      folderPath
+    ].filter(Boolean).join(' · ');
+    document.getElementById('pbCardName').value = (row && row.name) || item.name;
+    document.getElementById('pbCardNote').value = (row && row.note) || '';
+    paintCardIcon();
+    const isText = /\.(txt|md|csv|json)$/i.test(item.name) || String(item.mime || '').indexOf('text/') === 0;
+    const textWrap = document.getElementById('pbCardTextWrap');
+    const textEl = document.getElementById('pbCardText');
+    textWrap.hidden = !isText;
+    textEl.value = '';
+    if (isText) {
+      const u = await fileProxyUrl(item.path);
+      if (u) {
+        try {
+          const r = await fetch(u);
+          if (r.ok) { cardCtx.originalText = await r.text(); textEl.value = cardCtx.originalText; }
+        } catch (e) { }
+      }
+    }
+    const prev = document.getElementById('pbCardPreview');
+    if (kindOfFile(item.name, item.mime) === 'photos') {
+      const u = await fileProxyUrl(item.path);
+      prev.hidden = false;
+      prev.innerHTML = u ? '<img src="' + esc(u) + '" alt="">' : '';
+    } else {
+      prev.hidden = true;
+      prev.innerHTML = '';
+    }
+    const del = document.getElementById('pbCardDelete');
+    const canDelete = state.isOwner || (row && row.uploaded_by && me.id && row.uploaded_by === me.id);
+    del.style.display = (state.canWrite && canDelete) ? '' : 'none';
+    document.getElementById('pbFileCard').classList.add('open');
+  }
+  function closeFileCard() {
+    const el = document.getElementById('pbFileCard');
+    if (el) el.classList.remove('open');
+    cardCtx = null;
+  }
+  window.pbBankFileCard = function (path) {
+    const item = (state.allItems || []).find(function (i) { return i.path === path; });
+    if (item) openFileCard(item);
+  };
+
+  async function saveFileCard() {
+    if (!cardCtx) return;
+    const item = cardCtx.item;
+    const btn = document.getElementById('pbCardSave');
+    const nameEl = document.getElementById('pbCardName');
+    const note = document.getElementById('pbCardNote').value;
+    const textWrap = document.getElementById('pbCardTextWrap');
+    const textEl = document.getElementById('pbCardText');
+    const newName = nameEl.value.trim();
+    if (!newName) { toast('Введите название'); nameEl.focus(); return; }
+    btn.disabled = true;
+    const oldLabel = btn.textContent;
+    btn.textContent = 'Сохраняем…';
+    try {
+      let targetPath = item.path;
+      if (newName !== cardCtx.originalName) {
+        const safe = newName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
+        const dir = item.path.split('/').slice(0, -1).join('/');
+        const to = dir + '/' + safe;
+        const r = await callFn({ action: 'move', from: item.path, to: to });
+        if (r.error) { toast(r.error.message); return; }
+        targetPath = to;
+      }
+      if (!textWrap.hidden && textEl.value !== cardCtx.originalText) {
+        const link = await callFn({ action: 'upload-link', path: targetPath });
+        if (link.error) { toast('Текст не сохранён: ' + link.error.message); return; }
+        const put = await fetch(link.data.href, { method: link.data.method || 'PUT', body: new Blob([textEl.value], { type: 'text/plain;charset=utf-8' }) });
+        if (!put.ok) { toast('Яндекс не принял текст'); return; }
+      }
+      const me = window.__CURRENT_PROFILE__ || {};
+      const fileName = targetPath.split('/').pop();
+      if (window.supabaseClient) {
+        await window.supabaseClient.from('bank_files').upsert({
+          yandex_path: targetPath,
+          name: fileName,
+          mime: item.mime || '',
+          kind: kindOfFile(fileName, item.mime),
+          size: Number(item.size || 0),
+          folder: targetPath.split('/').slice(-2, -1)[0] || '',
+          uploaded_by: (cardCtx.row && cardCtx.row.uploaded_by) || me.id || null,
+          owner_name: (cardCtx.row && cardCtx.row.owner_name) || me.full_name || '',
+          note: note,
+          icon: cardIcon,
+          preview_url: item.preview || ''
+        }, { onConflict: 'yandex_path' });
+        if (targetPath !== item.path) {
+          try { await window.supabaseClient.from('bank_files').delete().eq('yandex_path', item.path); } catch (e) { }
+        }
+      }
+      state.cache = {};
+      state.albumCache = {};
+      state.metaMap = {};
+      toast('Карточка сохранена');
+      closeFileCard();
+      await render(true, currentTab());
+    } finally {
+      btn.disabled = false;
+      btn.textContent = oldLabel;
+    }
+  }
+
+  async function deleteFromCard() {
+    if (!cardCtx) return;
+    const item = cardCtx.item;
+    if (!confirm('Удалить «' + item.name + '» из облака? Файл удалится навсегда.')) return;
+    const r = await callFn({ action: 'delete', path: item.path });
+    if (r.error) { toast(r.error.message); return; }
+    state.cache = {};
+    state.albumCache = {};
+    state.metaMap = {};
+    closeFileCard();
+    toast('Файл удалён');
+    await render(true, currentTab());
+  }
+
   // ---------- создание папки с иконкой ----------
   let folderDraftIcon = '';
   function ensureFolderModal() {
@@ -491,9 +671,8 @@
     return '<div class="pb-bank-card">' + thumb +
       '<div class="pb-bank-body"><div class="pb-bank-name">' + esc(item.name) + '</div>' +
       '<div class="pb-bank-sub"><span>' + fmtSize(item.size) + '</span>' + author + '</div>' +
-      '<div class="pb-bank-actions"><button class="btn tiny" type="button" data-bank-open="' + esc(item.path) + '">Открыть</button>' +
-      (state.canWrite ? '<button class="btn tiny ghost" type="button" data-bank-del="' + esc(item.path) + '">Удалить</button>' : '') +
-      '</div></div></div>';
+      '<div class="pb-bank-actions"><button class="btn tiny" type="button" data-bank-card="' + esc(item.path) + '">Карточка</button>' +
+      '<button class="btn tiny ghost" type="button" data-bank-open="' + esc(item.path) + '">Открыть</button></div></div></div>';
   }
 
   async function loadMeta(items) {
@@ -513,6 +692,15 @@
         '<div><b>Пока пусто</b><div class="pb-bank-hint">' + esc(emptyText) + '</div></div></div>';
     }
     return '<div class="pb-bank-grid">' + items.map(function (it) { return fileCard(it); }).join('') + '</div>';
+  }
+
+  // Если файлов нет, но есть альбомы — не показываем «Пока пусто».
+  function filesArea(items, dirs, emptyText) {
+    if (items.length) return gridHTML(items, emptyText);
+    if (dirs && dirs.length) {
+      return '<div class="pb-bank-hint" style="padding:6px 2px">Файлы лежат внутри альбомов — откройте нужную папку.</div>';
+    }
+    return gridHTML([], emptyText);
   }
 
   function albumCard(info) {
@@ -668,7 +856,7 @@
       state.allItems = res.files;
       await loadMeta(res.files);
       const albumsHtml = res.dirs.length ? '<div class="pb-bank-cloud-head"><h2 style="margin:0;font-size:16px">Альбомы (подпапки)</h2><span class="pb-bank-hint">Обложка — первое фото из папки</span></div>' + await albumsHTML(res.dirs) : '';
-      html = albumsHtml + gridHTML(pagedItems(res.files, key), 'В папке «' + state.folder + '» пока нет файлов.') + moreButton(res.files, key) +
+      html = albumsHtml + filesArea(pagedItems(res.files, key), res.dirs, 'В папке «' + state.folder + '» пока нет файлов.') + moreButton(res.files, key) +
         '<div class="pb-bank-drop" id="pbBankDrop">Перетащите файлы сюда — они загрузятся в «' + esc(state.folder) + '»</div>' +
         '<input type="file" id="pbBankInput" multiple hidden>';
     } else {
@@ -751,7 +939,7 @@
       extra +
       (state.canWrite ? '<button class="btn ghost tiny" type="button" onclick="pbBankPick(\'' + esc(tab) + '\')">＋ Загрузить</button>' : '') +
       '</div>' + albumsHtml +
-      gridHTML(pagedItems(res.files, key), 'В папке «' + folder + '» пока нет файлов.') +
+      filesArea(pagedItems(res.files, key), res.dirs, 'В папке «' + folder + '» пока нет файлов.') +
       moreButton(res.files, key) +
       '<div class="pb-bank-drop" id="pbBankDrop">Перетащите файлы сюда — они загрузятся в «' + esc(folder) + '»</div>' +
       '<input type="file" id="pbBankInput" multiple hidden>';
@@ -789,6 +977,9 @@
         state.albumName = state.album.split('/').pop();
         render(true, currentTab());
       };
+    });
+    box.querySelectorAll('[data-bank-card]').forEach(function (b) {
+      b.onclick = function () { window.pbBankFileCard(b.getAttribute('data-bank-card')); };
     });
     box.querySelectorAll('[data-bank-open]').forEach(function (b) {
       b.onclick = function () {
