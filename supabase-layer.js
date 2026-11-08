@@ -633,10 +633,41 @@
       return;
     }
 
+    // ВАЖНО: после входа по ссылке из письма Supabase кладёт токены в #hash адреса.
+    // Если их не убрать, владелец копирует адресную строку и сливает сессию. Поэтому
+    // забираем токены себе и сразу вычищаем адрес — в строке остаётся чистый адрес сайта.
+    let bootSession = null;
+    try {
+      const rawHash = window.location.hash || '';
+      if (/access_token=/.test(rawHash) && /refresh_token=/.test(rawHash)) {
+        const params = new URLSearchParams(rawHash.replace(/^#/, ''));
+        const at = params.get('access_token');
+        const rt = params.get('refresh_token');
+        if (at && rt) {
+          bootSession = { access_token: at, refresh_token: rt };
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      }
+    } catch (e) { console.warn('[auth] hash parse', e); }
+    window.addEventListener('hashchange', function () {
+      try {
+        if (/access_token=|refresh_token=/.test(window.location.hash || '')) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      } catch (e) { }
+    });
+
     client = window.supabase.createClient(URL, KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: window.localStorage }
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: !bootSession, storage: window.localStorage }
     });
     window.supabaseClient = client;
+    if (bootSession) {
+      // уже вытащили токены из адреса — применяем вручную
+      client.auth.setSession(bootSession).then(function () { restoreSession(0); }).catch(function (err) {
+        console.error('[auth] setSession from URL', err);
+        restoreSession(0);
+      });
+    }
 
     document.getElementById('authForm').addEventListener('submit', async function (e) {
       e.preventDefault();
@@ -721,7 +752,7 @@
       }
       overlay.classList.add('open');
     }
-    restoreSession(0);
+    if (!bootSession) restoreSession(0);
   }
 
   if (document.readyState === 'loading') {
