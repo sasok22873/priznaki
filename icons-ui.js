@@ -21,7 +21,7 @@
     '.pb-tile-icon{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:rgba(167,139,250,.12);color:#c4b5fd;margin-bottom:14px}',
     '.pb-tile-icon .pb-icon{width:23px;height:23px}',
     '.pb-dir-icon{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:12px;background:rgba(167,139,250,.14);color:#c4b5fd;margin-right:10px;vertical-align:-8px}',
-    '.pb-icon-field{display:grid;gap:7px;margin:2px 0 4px}',
+    '.pb-icon-field{display:grid;gap:7px;margin:2px 0 4px;align-self:start}',
     '.pb-icon-field>span{font-size:12px;color:#8f8a9c}',
     '.pb-icon-btn{display:flex;align-items:center;gap:10px;min-height:46px;width:100%;padding:9px 12px;border:1px solid rgba(255,255,255,.09);border-radius:12px;background:rgba(255,255,255,.02);color:#e6e2ee;cursor:pointer;font:14px/1.2 inherit;text-align:left;transition:border-color .16s,background .16s}',
     '.pb-icon-btn:hover{border-color:rgba(167,139,250,.45);background:rgba(167,139,250,.07)}',
@@ -320,9 +320,10 @@
     const holder = document.createElement('div');
     holder.innerHTML = fieldMarkup(formKey, title);
     const block = holder.firstElementChild;
-    const submit = form.querySelector('button[type="submit"]');
+    const submit = form.querySelector('button[type="submit"]') || form.querySelector('.btn.red') || form.querySelector('button:not([type])');
     const actions = submit ? (submit.closest('.form-actions') || submit) : null;
     if (actions && actions.parentNode === form) form.insertBefore(block, actions);
+    else if (submit && submit.parentNode) submit.parentNode.insertBefore(block, submit);
     else form.appendChild(block);
     const btn = block.querySelector('[data-pb-icon-open]');
     btn.onclick = function () {
@@ -361,6 +362,84 @@
     if (form && form.id === 'goalForm') syncField('goalForm', (item && item.icon) || '');
     return res;
   };
+
+  // Экспорт задач в CSV (кнопка «Экспорт CSV» на странице задач)
+  window.pbExportTasksCsv = function () {
+    try {
+      const list = (window.pbState && window.pbState().tasks) || [];
+      const head = ['Название', 'Направление', 'Проект', 'Ответственный', 'Срок', 'Приоритет', 'Статус', 'Описание'];
+      const rows = list.map(function (t) {
+        return [t.title, t.area, t.project, t.owner, t.date, t.priority, t.status, t.description].map(function (v) {
+          return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+        }).join(';');
+      });
+      const csv = '\ufeff' + head.join(';') + '\r\n' + rows.join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = 'zadachi-' + new Date().toISOString().slice(0, 10) + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      if (typeof window.toast === 'function') window.toast('Задачи выгружены в CSV');
+    } catch (e) { console.warn('[export]', e); }
+  };
+
+  // Финансы доступны только владельцу: у участника прячем соответствующие кнопки
+  function hideOwnerOnly() {
+    try {
+      const me = window.__CURRENT_PROFILE__ || {};
+      const isOwner = me.role === 'owner';
+      if (isOwner) return;
+      ['[onclick*="moneyModal"]', '[onclick*="quickExpense"]', '[onclick*="openBankModal"]'].forEach(function (sel) {
+        document.querySelectorAll(sel).forEach(function (el) {
+          el.style.display = 'none';
+        });
+      });
+    } catch (e) { }
+  }
+  if (window.renderAll) {
+    const _r = window.renderAll;
+    window.renderAll = function () { const res = _r.apply(this, arguments); try { hideOwnerOnly(); } catch (e) { } return res; };
+  }
+  if (typeof window.deleteItem === 'function') {
+    const _d = window.deleteItem;
+    window.deleteItem = function (kind, i) {
+      if (kind === 'money' && (window.__CURRENT_PROFILE__ || {}).role !== 'owner') { if (typeof window.toast === 'function') window.toast('Финансы меняет только владелец'); return; }
+      return _d.apply(this, arguments);
+    };
+  }
+  // При редактировании задачи дата обязательна: если её не было (например, задача создана
+  // автоматически), подставляем сегодняшнюю, иначе форма молча не отправляется.
+  (function () {
+    if (typeof window.openEdit !== 'function') return;
+    const _openEdit = window.openEdit;
+    window.openEdit = function (kind, i) {
+      const res = _openEdit.apply(this, arguments);
+      try {
+        if (kind === 'task' || kind === 'goal') {
+          const form = document.getElementById(kind === 'task' ? 'taskForm' : 'goalForm');
+          if (form) {
+            [...form.querySelectorAll('[required]')].forEach(function (el) {
+              if (!el.value) {
+                if (el.type === 'date') {
+                  el.value = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Krasnoyarsk' }).format(new Date());
+                } else if (el.type === 'text') {
+                  el.value = (window.__CURRENT_PROFILE__ && window.__CURRENT_PROFILE__.full_name) || 'Без названия';
+                }
+              }
+            });
+          }
+        }
+      } catch (e) { }
+      return res;
+    };
+  })();
+
+  if (typeof window.openEdit === 'function') {
+    const _o = window.openEdit;
+    window.openEdit = function (kind, i) {
+      if (kind === 'money' && (window.__CURRENT_PROFILE__ || {}).role !== 'owner') { if (typeof window.toast === 'function') window.toast('Финансы меняет только владелец'); return; }
+      return _o.apply(this, arguments);
+    };
+  }
 
   // первый проход после загрузки — на случай, если данные уже отрисованы
   if (document.readyState === 'loading') {
