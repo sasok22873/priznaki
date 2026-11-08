@@ -14,6 +14,13 @@
 - Таблицы: tasks, goals, projects, events, money, members, directions, profiles.
 - Роли `profiles.role`: owner / member / viewer. Статус `profiles.access_status`: active / invited / revoked.
 
+## Дизайн-система (не ломать)
+- Все цвета, радиусы, тени и отступы — через CSS-переменные в `:root` в начале `<style>`. Хардкодить цвета в правилах нельзя.
+- Шрифт: системный стек (`-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable", "Segoe UI", Inter, sans-serif`). Никаких внешних шрифтов — сайт должен работать без интернета.
+- Сетка кратна 4/8 px. Радиусы 14–18. Заголовки с трекингом −0.02em.
+- Переходы 140–220 мс, `cubic-bezier(.2,.7,.2,1)`. Обязательно `@media (prefers-reduced-motion: reduce)`.
+- Мобильный вид — не «уменьшенный десктоп»: ≤900 px сайдбар превращается в нижний dock, ≤700 таблицы — в карточки.
+
 ## Жёсткие правила
 1. Ключ `service_role` никогда не попадает в браузерный код, `config.js`, коммит, README, скриншот или чат. Он живёт только в секретах Supabase.
 2. Перед любым SQL, меняющим RLS, — резервная копия базы.
