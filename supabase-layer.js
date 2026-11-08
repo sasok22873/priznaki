@@ -755,6 +755,17 @@
     if (!bootSession) restoreSession(0);
   }
 
+  // Сессия отозвана или истекла (например, после отзыва токенов на сервере):
+  // показываем экран входа, а не непонятную ошибку.
+  window.pbAuthExpired = function () {
+    try { if (client && client.auth && client.auth.signOut) client.auth.signOut({ scope: 'local' }).catch(function () { }); } catch (e) { }
+    try {
+      if (overlay) overlay.classList.add('open');
+      if (typeof showError === 'function') showError('Сессия истекла — войдите снова.');
+      document.getElementById('authSubmit').disabled = false;
+    } catch (e) { console.warn('[auth] pbAuthExpired', e); }
+  };
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
