@@ -84,20 +84,34 @@
     '.pb-bank-more{display:flex;justify-content:center;margin-top:12px}',
     '.pb-album-badge{position:absolute;top:8px;left:8px;z-index:2;display:grid;place-items:center;width:26px;height:26px;border-radius:9px;background:rgba(11,11,15,.72);color:#c4b5fd;border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px)}',
     '.pb-album-badge .pb-icon{width:15px;height:15px}',
-    '.pb-sec-head{display:flex;align-items:baseline;gap:10px;margin:2px 0 8px}',
-    '.pb-sec-head>span:first-child{font-size:12px;color:#8f8a9c}',
-    '.pb-sec-hint{font-size:11px;color:#6f6a7d}',
-    '.pb-sec-buttons{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}',
-    '.pb-sec-buttons .btn{padding:4px 10px;font-size:12px}',
-    '.pb-sec-list{display:grid;gap:10px;margin:0 0 10px}',
-    '.pb-sec-item{border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.02);padding:10px}',
-    '.pb-sec-item-head{display:flex;align-items:center;gap:6px;margin-bottom:6px}',
-    '.pb-sec-item-head input{flex:1 1 auto;min-width:0;background:transparent;border:0;border-bottom:1px dashed rgba(255,255,255,.18);color:#d8d2e6;font:600 13px inherit;padding:2px 0}',
-    '.pb-sec-item-head input:focus{outline:none;border-bottom-color:rgba(167,139,250,.8)}',
-    '.pb-sec-item-head button{width:24px;height:24px;border-radius:7px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);color:#a8a3b3;cursor:pointer;line-height:1}',
-    '.pb-sec-item-head button:hover{color:#fff;border-color:rgba(167,139,250,.6)}',
-    '.pb-sec-item textarea{width:100%;min-height:64px;resize:vertical;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.08);border-radius:9px;color:#e7e2f2;font:13px/1.5 inherit;padding:8px 10px}',
-    '.pb-sec-raw{display:flex;align-items:center;gap:8px;font-size:12px;color:#8f8a9c;margin-top:2px}',
+    '.pb-song-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end;margin:0 0 14px}',
+    '.pb-song-name{display:grid;gap:6px;min-width:0;font-size:12px;color:#8f8a9c}',
+    '.pb-song-name input{width:100%}',
+    '.pb-song-icon{display:grid;gap:6px;font-size:12px;color:#8f8a9c}',
+    '.pb-song-icon .pb-icon-btn{width:54px;min-height:46px;justify-content:center;padding:6px}',
+    '.pb-song-icon .pb-icon-name{display:none}',
+    '.pb-song-sections{display:grid;gap:10px;margin:0 0 14px}',
+    '.pb-sec-list{display:grid;gap:10px}',
+    '.pb-sec-item{border:1px solid rgba(255,255,255,.1);border-radius:14px;background:rgba(255,255,255,.02);padding:10px 12px;position:relative;transition:border-color .15s,box-shadow .15s}',
+    '.pb-sec-item:hover{border-color:rgba(167,139,250,.35)}',
+    '.pb-sec-item.dragging{border-color:rgba(167,139,250,.85);box-shadow:0 16px 34px rgba(0,0,0,.55);background:rgba(167,139,250,.06);z-index:5}',
+    '.pb-sec-item-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}',
+    '.pb-sec-handle{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;color:#6f6a7d;cursor:grab;touch-action:none;flex:0 0 auto;font-size:15px;line-height:1}',
+    '.pb-sec-handle:hover{color:#c4b5fd;background:rgba(167,139,250,.14)}',
+    '.pb-sec-handle:active{cursor:grabbing}',
+    '.pb-sec-item-head input{flex:1 1 auto;min-width:0;background:transparent;border:0;border-bottom:1px dashed rgba(255,255,255,.16);color:#e6e2ee;font:600 13.5px inherit;padding:2px 0}',
+    '.pb-sec-item-head input:focus{outline:none;border-bottom-color:rgba(167,139,250,.85)}',
+    '.pb-sec-del{width:24px;height:24px;border-radius:7px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);color:#a8a3b3;cursor:pointer;line-height:1;flex:0 0 auto}',
+    '.pb-sec-del:hover{color:#fff;border-color:rgba(248,113,113,.7);background:rgba(248,113,113,.14)}',
+    '.pb-sec-item textarea{width:100%;min-height:62px;resize:vertical;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.08);border-radius:10px;color:#e7e2f2;font:13px/1.5 inherit;padding:8px 10px}',
+    '.pb-sec-add-wrap{position:relative;display:flex}',
+    '.pb-sec-add{width:100%;justify-content:center;border-style:dashed}',
+    '.pb-sec-menu{left:0;right:0;top:calc(100% + 6px);z-index:70;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:8px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#17151d;box-shadow:0 18px 38px rgba(0,0,0,.6)}',
+    '.pb-sec-menu[hidden]{display:none}',
+    '.pb-sec-menu button{text-align:left;padding:7px 9px;border-radius:8px;border:0;background:transparent;color:#e6e2ee;font:13px inherit;cursor:pointer}',
+    '.pb-sec-menu button:hover{background:rgba(167,139,250,.16)}',
+    '.pb-song-note{display:grid;gap:6px;margin:0 0 14px;font-size:12px;color:#8f8a9c}',
+    '.pb-sec-raw{display:flex;align-items:center;gap:8px;font-size:12px;color:#8f8a9c;margin-top:6px}',
     '.pb-card-preview{margin:0 0 14px;border-radius:12px;overflow:hidden;background:#101014;display:grid;place-items:center;max-height:260px}',
     '.pb-card-preview img{width:100%;max-height:260px;object-fit:contain;display:block}',
     '.pb-viewer-modal{max-width:920px!important;width:min(920px,96vw)!important}',
@@ -506,7 +520,7 @@
   let cardCtx = null;
   let cardIcon = '';
   // ---------- разделы песни (Куплет / Припев / ...) ----------
-  const SEC_TYPES = ['Куплет', 'Припев', 'Бридж', 'Интро', 'Аутро', 'Проигрыш', 'Пре-хор', 'Кода'];
+  const SEC_TYPES = ['Куплет', 'Припев', 'Пре-хор', 'Бридж', 'Интро', 'Проигрыш', 'Соло', 'Аутро', 'Речитатив', 'Кода', 'Финал'];
   function isLyricsPath(path) {
     return String(path || '').indexOf('/' + FOLDERS.lyrics + '/') !== -1 || /\/01_/.test(String(path || ''));
   }
@@ -516,52 +530,50 @@
     let cur = null;
     lines.forEach(function (line) {
       const m = line.match(/^\s*\[([^\]]{1,40})\]\s*$/);
-      if (m) {
-        cur = { title: m[1].trim(), text: [] };
-        list.push(cur);
-      } else {
+      if (m) { cur = { title: m[1].trim(), text: [] }; list.push(cur); }
+      else {
         if (!cur) { cur = { title: 'Куплет 1', text: [] }; list.push(cur); }
         cur.text.push(line);
       }
     });
     if (!list.length) list.push({ title: 'Куплет 1', text: [] });
-    list.forEach(function (s) {
-      s.text = s.text.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-    });
+    list.forEach(function (sec) { sec.text = sec.text.join('\n').replace(/\n{3,}/g, '\n\n').trim(); });
     return list;
   }
   function sectionsToText(list) {
-    return (list || []).map(function (s) {
-      return '[' + (s.title || 'Куплет') + ']\n' + String(s.text || '').trim();
+    if (!list || !list.length) return '';
+    return list.map(function (sec) {
+      return '[' + (sec.title || 'Куплет') + ']\n' + String(sec.text || '').trim();
     }).join('\n\n') + '\n';
   }
   function secNextTitle(type) {
     const list = collectSections();
-    if (type === 'Интро' || type === 'Аутро' || type === 'Кода') return type;
+    if (['Интро', 'Аутро', 'Кода', 'Финал', 'Соло', 'Проигрыш'].indexOf(type) !== -1) return type;
     let n = 0;
-    list.forEach(function (s) { if (String(s.title).indexOf(type) === 0) n++; });
+    list.forEach(function (sec) { if (String(sec.title).indexOf(type) === 0) n++; });
     return type + ' ' + (n + 1);
   }
   function renderSections(list) {
     const box = document.getElementById('pbCardSections');
     if (!box) return;
     box.innerHTML = '';
+    if (!list || !list.length) {
+      box.innerHTML = '<div class="pb-bank-hint">Разделов пока нет — нажмите «＋ Создать раздел».</div>';
+      return;
+    }
     (list || []).forEach(function (sec, i) {
       const item = document.createElement('div');
       item.className = 'pb-sec-item';
       item.dataset.i = String(i);
       item.innerHTML = '<div class="pb-sec-item-head">' +
+        '<span class="pb-sec-handle" title="Перетащить раздел">⠿</span>' +
         '<input class="pb-sec-title" value="' + esc(sec.title || '') + '" maxlength="40" aria-label="Название раздела">' +
-        '<button type="button" data-sec-up="1" title="Выше">↑</button>' +
-        '<button type="button" data-sec-down="1" title="Ниже">↓</button>' +
-        '<button type="button" data-sec-del="1" title="Удалить раздел">✕</button>' +
+        '<button type="button" class="pb-sec-del" data-sec-del="1" title="Удалить раздел">✕</button>' +
         '</div>' +
         '<textarea class="pb-sec-text" rows="3" placeholder="Текст раздела">' + esc(sec.text || '') + '</textarea>';
       box.appendChild(item);
     });
-    if (!box.children.length) {
-      box.innerHTML = '<div class="pb-bank-hint">Добавьте раздел: Куплет, Припев и т.д.</div>';
-    }
+    wireSectionDrag();
   }
   function collectSections() {
     const box = document.getElementById('pbCardSections');
@@ -578,47 +590,119 @@
     list.push({ title: secNextTitle(type), text: '' });
     renderSections(list);
     const box = document.getElementById('pbCardSections');
-    const last = box.querySelector('.pb-sec-item:last-child .pb-sec-text');
-    if (last) last.focus();
+    const items = box ? box.querySelectorAll('.pb-sec-item') : [];
+    const lastEl = items.length ? items[items.length - 1] : null;
+    const ta = lastEl ? lastEl.querySelector('.pb-sec-text') : null;
+    if (ta) ta.focus();
   }
-  function ensureSecButtons() {
-    const bar = document.getElementById('pbCardSecButtons');
-    if (!bar || bar.dataset.ready === '1') return;
-    bar.dataset.ready = '1';
-    bar.innerHTML = SEC_TYPES.map(function (t) {
-      return '<button type="button" class="btn ghost tiny" data-sec-add="' + esc(t) + '">＋ ' + esc(t) + '</button>';
+  let secMenuWired = false;
+  function ensureSecMenu() {
+    const menu = document.getElementById('pbCardSecMenu');
+    if (!menu || menu.dataset.ready === '1') return;
+    menu.dataset.ready = '1';
+    menu.innerHTML = SEC_TYPES.map(function (t) {
+      return '<button type="button" data-sec-pick="' + esc(t) + '">' + esc(t) + '</button>';
     }).join('');
-  }
-  function currentCardText() {
-    const rawMode = document.getElementById('pbCardRawMode');
-    const sectionsWrap = document.getElementById('pbCardSectionsWrap');
-    const textEl = document.getElementById('pbCardText');
-    if (sectionsWrap && !sectionsWrap.hidden && !(rawMode && rawMode.checked)) {
-      return sectionsToText(collectSections());
+    menu.addEventListener('click', function (e) {
+      const b = e.target.closest('[data-sec-pick]');
+      if (!b) return;
+      addSection(b.getAttribute('data-sec-pick'));
+      closeSecMenu();
+    });
+    if (!secMenuWired) {
+      secMenuWired = true;
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('.pb-sec-add-wrap')) closeSecMenu();
+      });
     }
-    return textEl ? textEl.value : '';
+  }
+  function toggleSecMenu() {
+    const m = document.getElementById('pbCardSecMenu');
+    const btn = document.getElementById('pbCardSecAdd');
+    if (!m || !btn) return;
+    if (!m.hidden) { m.hidden = true; return; }
+    const r = btn.getBoundingClientRect();
+    m.style.position = 'fixed';
+    m.style.left = Math.round(r.left) + 'px';
+    m.style.width = Math.round(r.width) + 'px';
+    const below = window.innerHeight - r.bottom - 14;
+    if (below < 220 && r.top > 240) {
+      m.style.top = 'auto';
+      m.style.bottom = Math.round(window.innerHeight - r.top + 6) + 'px';
+      m.style.maxHeight = Math.min(260, r.top - 20) + 'px';
+    } else {
+      m.style.bottom = 'auto';
+      m.style.top = Math.round(r.bottom + 6) + 'px';
+      m.style.maxHeight = Math.min(260, below) + 'px';
+    }
+    m.style.overflowY = 'auto';
+    m.hidden = false;
+  }
+  function closeSecMenu() {
+    const m = document.getElementById('pbCardSecMenu');
+    if (m) m.hidden = true;
+  }
+  let secDrag = null;
+  function wireSectionDrag() {
+    const list = document.getElementById('pbCardSections');
+    if (!list || list.dataset.dragWired === '1') return;
+    list.dataset.dragWired = '1';
+    list.addEventListener('pointerdown', function (e) {
+      const handle = e.target.closest('.pb-sec-handle');
+      if (!handle) return;
+      const item = handle.closest('.pb-sec-item');
+      if (!item) return;
+      e.preventDefault();
+      secDrag = { item: item, list: list };
+      item.classList.add('dragging');
+      try { handle.setPointerCapture(e.pointerId); } catch (_e) { }
+    });
+    list.addEventListener('pointermove', function (e) {
+      if (!secDrag) return;
+      const item = secDrag.item;
+      const siblings = Array.prototype.filter.call(list.querySelectorAll('.pb-sec-item'), function (el) { return el !== item; });
+      let target = null;
+      for (let k = 0; k < siblings.length; k++) {
+        const r = siblings[k].getBoundingClientRect();
+        if (e.clientY < r.top + r.height / 2) { target = siblings[k]; break; }
+      }
+      if (target) {
+        if (item.nextElementSibling !== target) list.insertBefore(item, target);
+      } else if (list.lastElementChild !== item) {
+        list.appendChild(item);
+      }
+    });
+    function endDrag() {
+      if (!secDrag) return;
+      secDrag.item.classList.remove('dragging');
+      secDrag = null;
+      Array.prototype.forEach.call(list.querySelectorAll('.pb-sec-item'), function (el, i) { el.dataset.i = String(i); });
+    }
+    list.addEventListener('pointerup', endDrag);
+    list.addEventListener('pointercancel', endDrag);
   }
   function wireSections() {
-    ensureSecButtons();
-    const bar = document.getElementById('pbCardSecButtons');
-    if (bar && bar.dataset.wired !== '1') {
-      bar.dataset.wired = '1';
-      bar.addEventListener('click', function (e) {
-        const b = e.target.closest('[data-sec-add]');
-        if (b) addSection(b.getAttribute('data-sec-add'));
+    ensureSecMenu();
+    const addBtn = document.getElementById('pbCardSecAdd');
+    if (addBtn && addBtn.dataset.wired !== '1') {
+      addBtn.dataset.wired = '1';
+      addBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleSecMenu();
       });
     }
     const box = document.getElementById('pbCardSections');
     if (box && box.dataset.wired !== '1') {
       box.dataset.wired = '1';
       box.addEventListener('click', function (e) {
-        const item = e.target.closest('.pb-sec-item');
+        const del = e.target.closest('[data-sec-del]');
+        if (!del) return;
+        const item = del.closest('.pb-sec-item');
         if (!item) return;
         const list = collectSections();
-        const i = Number(item.dataset.i);
-        if (e.target.closest('[data-sec-del]')) { list.splice(i, 1); renderSections(list); return; }
-        if (e.target.closest('[data-sec-up]') && i > 0) { const t = list[i - 1]; list[i - 1] = list[i]; list[i] = t; renderSections(list); return; }
-        if (e.target.closest('[data-sec-down]') && i < list.length - 1) { const t = list[i + 1]; list[i + 1] = list[i]; list[i] = t; renderSections(list); return; }
+        list.splice(Number(item.dataset.i), 1);
+        renderSections(list);
       });
     }
     const raw = document.getElementById('pbCardRawMode');
@@ -637,6 +721,15 @@
       });
     }
   }
+  function currentCardText() {
+    const rawMode = document.getElementById('pbCardRawMode');
+    const sectionsWrap = document.getElementById('pbCardSectionsWrap');
+    const textEl = document.getElementById('pbCardText');
+    if (sectionsWrap && !sectionsWrap.hidden && !(rawMode && rawMode.checked)) {
+      return sectionsToText(collectSections());
+    }
+    return textEl ? textEl.value : '';
+  }
   function showSectionsMode(text) {
     ensureFileCard();
     wireSections();
@@ -646,13 +739,15 @@
     if (wrap) wrap.hidden = false;
     if (textWrap) textWrap.hidden = true;
     if (raw) raw.checked = false;
-    renderSections(parseSongSections(text));
+    const clean = String(text || '').trim();
+    renderSections(clean ? parseSongSections(clean) : []);
   }
   function hideSectionsMode() {
     const wrap = document.getElementById('pbCardSectionsWrap');
     if (wrap) wrap.hidden = true;
     const raw = document.getElementById('pbCardRawMode');
     if (raw) raw.checked = false;
+    closeSecMenu();
   }
 
   function ensureFileCard() {
@@ -661,22 +756,24 @@
     wrap.className = 'modal-back';
     wrap.id = 'pbFileCard';
     wrap.innerHTML = [
-      '<div class="modal" role="dialog" aria-modal="true" style="max-width:660px">',
+      '<div class="modal pb-song-modal" role="dialog" aria-modal="true" style="max-width:640px">',
       '<div class="pb-modal-title">Карточка файла</div>',
       '<p class="pb-modal-sub" id="pbCardMeta"></p>',
       '<div class="pb-card-preview" id="pbCardPreview" hidden></div>',
-      '<div class="form">',
-      '<label>Название<input class="field" id="pbCardName" maxlength="140"></label>',
-      '<label>Заметка<textarea class="field" id="pbCardNote" rows="3" placeholder="Что это за файл, для чего, кому нужно"></textarea></label>',
-      '<div class="pb-icon-field"><span>Иконка карточки</span><button type="button" class="pb-icon-btn" id="pbCardIconBtn"><span class="pb-icon-preview" id="pbCardIconPreview"></span><span class="pb-icon-name" id="pbCardIconName">Выбрать иконку</span></button></div>',
-      '<div id="pbCardTextWrap" hidden><label>Содержимое текста<textarea class="field" id="pbCardText" rows="10"></textarea></label></div>',
-      '<div id="pbCardSectionsWrap" hidden>',
-      '<div class="pb-sec-head"><span>Разделы песни</span><span class="pb-sec-hint">Куплет, припев, бридж и т.д.</span></div>',
-      '<div class="pb-sec-buttons" id="pbCardSecButtons"></div>',
+      '<div class="pb-song-head">',
+      '<label class="pb-song-name">Название<input class="field" id="pbCardName" maxlength="140"></label>',
+      '<div class="pb-song-icon"><span>Иконка</span><button type="button" class="pb-icon-btn" id="pbCardIconBtn"><span class="pb-icon-preview" id="pbCardIconPreview"></span><span class="pb-icon-name" id="pbCardIconName">Выбрать иконку</span></button></div>',
+      '</div>',
+      '<div id="pbCardSectionsWrap" class="pb-song-sections" hidden>',
       '<div class="pb-sec-list" id="pbCardSections"></div>',
+      '<div class="pb-sec-add-wrap">',
+      '<button type="button" class="btn ghost pb-sec-add" id="pbCardSecAdd">＋ Создать раздел</button>',
+      '<div class="pb-sec-menu" id="pbCardSecMenu" hidden></div>',
+      '</div>',
       '<label class="pb-sec-raw"><input type="checkbox" id="pbCardRawMode"> Редактировать как обычный текст</label>',
       '</div>',
-      '</div>',
+      '<label class="pb-song-note">Заметка<textarea class="field" id="pbCardNote" rows="3" placeholder="Что это за файл, для чего, кому нужно"></textarea></label>',
+      '<div id="pbCardTextWrap" hidden><label>Содержимое текста<textarea class="field" id="pbCardText" rows="10"></textarea></label></div>',
       '<div class="pb-modal-actions" style="justify-content:space-between">',
       '<div><button class="btn ghost" type="button" id="pbCardCancel">Отмена</button></div>',
       '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">',
@@ -698,6 +795,7 @@
     document.getElementById('pbCardDelete').onclick = deleteFromCard;
     wireSections();
   }
+
   function paintCardIcon() {
     const p = document.getElementById('pbCardIconPreview');
     const n = document.getElementById('pbCardIconName');
