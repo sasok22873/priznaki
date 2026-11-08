@@ -84,6 +84,20 @@
     '.pb-bank-more{display:flex;justify-content:center;margin-top:12px}',
     '.pb-album-badge{position:absolute;top:8px;left:8px;z-index:2;display:grid;place-items:center;width:26px;height:26px;border-radius:9px;background:rgba(11,11,15,.72);color:#c4b5fd;border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px)}',
     '.pb-album-badge .pb-icon{width:15px;height:15px}',
+    '.pb-sec-head{display:flex;align-items:baseline;gap:10px;margin:2px 0 8px}',
+    '.pb-sec-head>span:first-child{font-size:12px;color:#8f8a9c}',
+    '.pb-sec-hint{font-size:11px;color:#6f6a7d}',
+    '.pb-sec-buttons{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}',
+    '.pb-sec-buttons .btn{padding:4px 10px;font-size:12px}',
+    '.pb-sec-list{display:grid;gap:10px;margin:0 0 10px}',
+    '.pb-sec-item{border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.02);padding:10px}',
+    '.pb-sec-item-head{display:flex;align-items:center;gap:6px;margin-bottom:6px}',
+    '.pb-sec-item-head input{flex:1 1 auto;min-width:0;background:transparent;border:0;border-bottom:1px dashed rgba(255,255,255,.18);color:#d8d2e6;font:600 13px inherit;padding:2px 0}',
+    '.pb-sec-item-head input:focus{outline:none;border-bottom-color:rgba(167,139,250,.8)}',
+    '.pb-sec-item-head button{width:24px;height:24px;border-radius:7px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);color:#a8a3b3;cursor:pointer;line-height:1}',
+    '.pb-sec-item-head button:hover{color:#fff;border-color:rgba(167,139,250,.6)}',
+    '.pb-sec-item textarea{width:100%;min-height:64px;resize:vertical;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.08);border-radius:9px;color:#e7e2f2;font:13px/1.5 inherit;padding:8px 10px}',
+    '.pb-sec-raw{display:flex;align-items:center;gap:8px;font-size:12px;color:#8f8a9c;margin-top:2px}',
     '.pb-card-preview{margin:0 0 14px;border-radius:12px;overflow:hidden;background:#101014;display:grid;place-items:center;max-height:260px}',
     '.pb-card-preview img{width:100%;max-height:260px;object-fit:contain;display:block}',
     '.pb-viewer-modal{max-width:920px!important;width:min(920px,96vw)!important}',
@@ -491,6 +505,156 @@
   // ---------- карточка файла: название, заметка, иконка, текст, удаление ----------
   let cardCtx = null;
   let cardIcon = '';
+  // ---------- разделы песни (Куплет / Припев / ...) ----------
+  const SEC_TYPES = ['Куплет', 'Припев', 'Бридж', 'Интро', 'Аутро', 'Проигрыш', 'Пре-хор', 'Кода'];
+  function isLyricsPath(path) {
+    return String(path || '').indexOf('/' + FOLDERS.lyrics + '/') !== -1 || /\/01_/.test(String(path || ''));
+  }
+  function parseSongSections(text) {
+    const lines = String(text || '').split(/\r?\n/);
+    const list = [];
+    let cur = null;
+    lines.forEach(function (line) {
+      const m = line.match(/^\s*\[([^\]]{1,40})\]\s*$/);
+      if (m) {
+        cur = { title: m[1].trim(), text: [] };
+        list.push(cur);
+      } else {
+        if (!cur) { cur = { title: 'Куплет 1', text: [] }; list.push(cur); }
+        cur.text.push(line);
+      }
+    });
+    if (!list.length) list.push({ title: 'Куплет 1', text: [] });
+    list.forEach(function (s) {
+      s.text = s.text.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    });
+    return list;
+  }
+  function sectionsToText(list) {
+    return (list || []).map(function (s) {
+      return '[' + (s.title || 'Куплет') + ']\n' + String(s.text || '').trim();
+    }).join('\n\n') + '\n';
+  }
+  function secNextTitle(type) {
+    const list = collectSections();
+    if (type === 'Интро' || type === 'Аутро' || type === 'Кода') return type;
+    let n = 0;
+    list.forEach(function (s) { if (String(s.title).indexOf(type) === 0) n++; });
+    return type + ' ' + (n + 1);
+  }
+  function renderSections(list) {
+    const box = document.getElementById('pbCardSections');
+    if (!box) return;
+    box.innerHTML = '';
+    (list || []).forEach(function (sec, i) {
+      const item = document.createElement('div');
+      item.className = 'pb-sec-item';
+      item.dataset.i = String(i);
+      item.innerHTML = '<div class="pb-sec-item-head">' +
+        '<input class="pb-sec-title" value="' + esc(sec.title || '') + '" maxlength="40" aria-label="Название раздела">' +
+        '<button type="button" data-sec-up="1" title="Выше">↑</button>' +
+        '<button type="button" data-sec-down="1" title="Ниже">↓</button>' +
+        '<button type="button" data-sec-del="1" title="Удалить раздел">✕</button>' +
+        '</div>' +
+        '<textarea class="pb-sec-text" rows="3" placeholder="Текст раздела">' + esc(sec.text || '') + '</textarea>';
+      box.appendChild(item);
+    });
+    if (!box.children.length) {
+      box.innerHTML = '<div class="pb-bank-hint">Добавьте раздел: Куплет, Припев и т.д.</div>';
+    }
+  }
+  function collectSections() {
+    const box = document.getElementById('pbCardSections');
+    if (!box) return [];
+    return Array.prototype.map.call(box.querySelectorAll('.pb-sec-item'), function (item) {
+      return {
+        title: (item.querySelector('.pb-sec-title') || {}).value || 'Куплет',
+        text: (item.querySelector('.pb-sec-text') || {}).value || ''
+      };
+    });
+  }
+  function addSection(type) {
+    const list = collectSections();
+    list.push({ title: secNextTitle(type), text: '' });
+    renderSections(list);
+    const box = document.getElementById('pbCardSections');
+    const last = box.querySelector('.pb-sec-item:last-child .pb-sec-text');
+    if (last) last.focus();
+  }
+  function ensureSecButtons() {
+    const bar = document.getElementById('pbCardSecButtons');
+    if (!bar || bar.dataset.ready === '1') return;
+    bar.dataset.ready = '1';
+    bar.innerHTML = SEC_TYPES.map(function (t) {
+      return '<button type="button" class="btn ghost tiny" data-sec-add="' + esc(t) + '">＋ ' + esc(t) + '</button>';
+    }).join('');
+  }
+  function currentCardText() {
+    const rawMode = document.getElementById('pbCardRawMode');
+    const sectionsWrap = document.getElementById('pbCardSectionsWrap');
+    const textEl = document.getElementById('pbCardText');
+    if (sectionsWrap && !sectionsWrap.hidden && !(rawMode && rawMode.checked)) {
+      return sectionsToText(collectSections());
+    }
+    return textEl ? textEl.value : '';
+  }
+  function wireSections() {
+    ensureSecButtons();
+    const bar = document.getElementById('pbCardSecButtons');
+    if (bar && bar.dataset.wired !== '1') {
+      bar.dataset.wired = '1';
+      bar.addEventListener('click', function (e) {
+        const b = e.target.closest('[data-sec-add]');
+        if (b) addSection(b.getAttribute('data-sec-add'));
+      });
+    }
+    const box = document.getElementById('pbCardSections');
+    if (box && box.dataset.wired !== '1') {
+      box.dataset.wired = '1';
+      box.addEventListener('click', function (e) {
+        const item = e.target.closest('.pb-sec-item');
+        if (!item) return;
+        const list = collectSections();
+        const i = Number(item.dataset.i);
+        if (e.target.closest('[data-sec-del]')) { list.splice(i, 1); renderSections(list); return; }
+        if (e.target.closest('[data-sec-up]') && i > 0) { const t = list[i - 1]; list[i - 1] = list[i]; list[i] = t; renderSections(list); return; }
+        if (e.target.closest('[data-sec-down]') && i < list.length - 1) { const t = list[i + 1]; list[i + 1] = list[i]; list[i] = t; renderSections(list); return; }
+      });
+    }
+    const raw = document.getElementById('pbCardRawMode');
+    if (raw && raw.dataset.wired !== '1') {
+      raw.dataset.wired = '1';
+      raw.addEventListener('change', function () {
+        const textWrap = document.getElementById('pbCardTextWrap');
+        const textEl = document.getElementById('pbCardText');
+        if (raw.checked) {
+          if (textEl) textEl.value = sectionsToText(collectSections());
+          if (textWrap) textWrap.hidden = false;
+        } else {
+          if (textEl) renderSections(parseSongSections(textEl.value));
+          if (textWrap) textWrap.hidden = true;
+        }
+      });
+    }
+  }
+  function showSectionsMode(text) {
+    ensureFileCard();
+    wireSections();
+    const wrap = document.getElementById('pbCardSectionsWrap');
+    const textWrap = document.getElementById('pbCardTextWrap');
+    const raw = document.getElementById('pbCardRawMode');
+    if (wrap) wrap.hidden = false;
+    if (textWrap) textWrap.hidden = true;
+    if (raw) raw.checked = false;
+    renderSections(parseSongSections(text));
+  }
+  function hideSectionsMode() {
+    const wrap = document.getElementById('pbCardSectionsWrap');
+    if (wrap) wrap.hidden = true;
+    const raw = document.getElementById('pbCardRawMode');
+    if (raw) raw.checked = false;
+  }
+
   function ensureFileCard() {
     if (document.getElementById('pbFileCard')) return;
     const wrap = document.createElement('div');
@@ -506,6 +670,12 @@
       '<label>Заметка<textarea class="field" id="pbCardNote" rows="3" placeholder="Что это за файл, для чего, кому нужно"></textarea></label>',
       '<div class="pb-icon-field"><span>Иконка карточки</span><button type="button" class="pb-icon-btn" id="pbCardIconBtn"><span class="pb-icon-preview" id="pbCardIconPreview"></span><span class="pb-icon-name" id="pbCardIconName">Выбрать иконку</span></button></div>',
       '<div id="pbCardTextWrap" hidden><label>Содержимое текста<textarea class="field" id="pbCardText" rows="10"></textarea></label></div>',
+      '<div id="pbCardSectionsWrap" hidden>',
+      '<div class="pb-sec-head"><span>Разделы песни</span><span class="pb-sec-hint">Куплет, припев, бридж и т.д.</span></div>',
+      '<div class="pb-sec-buttons" id="pbCardSecButtons"></div>',
+      '<div class="pb-sec-list" id="pbCardSections"></div>',
+      '<label class="pb-sec-raw"><input type="checkbox" id="pbCardRawMode"> Редактировать как обычный текст</label>',
+      '</div>',
       '</div>',
       '<div class="pb-modal-actions" style="justify-content:space-between">',
       '<div><button class="btn ghost" type="button" id="pbCardCancel">Отмена</button></div>',
@@ -526,6 +696,7 @@
     document.getElementById('pbCardSave').onclick = saveFileCard;
     document.getElementById('pbCardOpen').onclick = function () { if (cardCtx) openFile(cardCtx.item); };
     document.getElementById('pbCardDelete').onclick = deleteFromCard;
+    wireSections();
   }
   function paintCardIcon() {
     const p = document.getElementById('pbCardIconPreview');
@@ -554,19 +725,23 @@
     document.getElementById('pbCardNote').value = (row && row.note) || '';
     paintCardIcon();
     const isText = /\.(txt|md|csv|json)$/i.test(item.name) || String(item.mime || '').indexOf('text/') === 0;
+    const lyrics = isText && isLyricsPath(item.path);
     const textWrap = document.getElementById('pbCardTextWrap');
     const textEl = document.getElementById('pbCardText');
-    textWrap.hidden = !isText;
+    textWrap.hidden = !isText || lyrics;
     textEl.value = '';
     if (isText) {
       const u = await fileProxyUrl(item.path);
       if (u) {
         try {
-          const r = await fetch(u);
+          // свежий текст: обходим кэш браузера после правок
+          const fresh = u + (u.indexOf('?') >= 0 ? '&' : '?') + 'r=' + Date.now();
+          const r = await fetch(fresh);
           if (r.ok) { cardCtx.originalText = await r.text(); textEl.value = cardCtx.originalText; }
         } catch (e) { }
       }
     }
+    if (lyrics) showSectionsMode(cardCtx.originalText); else hideSectionsMode();
     const prev = document.getElementById('pbCardPreview');
     if (kindOfFile(item.name, item.mime) === 'photos') {
       const u = await fileProxyUrl(item.path);
@@ -602,8 +777,9 @@
     document.getElementById('pbCardName').value = '';
     document.getElementById('pbCardNote').value = '';
     const textWrap = document.getElementById('pbCardTextWrap');
-    textWrap.hidden = false;
+    textWrap.hidden = true;
     document.getElementById('pbCardText').value = '';
+    showSectionsMode('');
     const prev = document.getElementById('pbCardPreview');
     prev.hidden = true;
     prev.innerHTML = '';
@@ -618,7 +794,7 @@
     const btn = document.getElementById('pbCardSave');
     const name = nameEl.value.trim();
     if (!name) { toast('Введите название песни'); nameEl.focus(); return; }
-    const text = document.getElementById('pbCardText').value;
+    const text = currentCardText();
     const note = document.getElementById('pbCardNote').value;
     const fileName = name.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120) + '.txt';
     const path = ROOT + '/' + FOLDERS.lyrics + '/' + fileName;
@@ -690,10 +866,13 @@
         if (r.error) { toast(r.error.message); return; }
         targetPath = to;
       }
-      if (!textWrap.hidden && textEl.value !== cardCtx.originalText) {
+      const sectionsWrapEl = document.getElementById('pbCardSectionsWrap');
+      const sectionsOn = !!(sectionsWrapEl && !sectionsWrapEl.hidden);
+      const textForSave = currentCardText();
+      if ((!textWrap.hidden || sectionsOn) && textForSave !== cardCtx.originalText) {
         const link = await callFn({ action: 'upload-link', path: targetPath });
         if (link.error) { toast('Текст не сохранён: ' + link.error.message); return; }
-        const put = await fetch(link.data.href, { method: link.data.method || 'PUT', body: new Blob([textEl.value], { type: 'text/plain;charset=utf-8' }) });
+        const put = await fetch(link.data.href, { method: link.data.method || 'PUT', body: new Blob([textForSave], { type: 'text/plain;charset=utf-8' }) });
         if (!put.ok) { toast('Яндекс не принял текст'); return; }
       }
       const me = window.__CURRENT_PROFILE__ || {};
