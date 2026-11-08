@@ -42,8 +42,13 @@
     '.pb-dnd-hint .pb-icon{width:14px;height:14px;color:#a78bfa}',
     '@media (pointer:coarse){.pb-dnd-hint{display:none}.month-cell{min-height:96px}}',
     /* редактор события */
-    '#pbEventEditor .modal{max-width:520px}',
-    '#pbEventEditor .pb-ed-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}'
+    '#pbEventEditor .modal{max-width:560px}',
+    '#pbEventEditor .pb-ed-row{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:10px}',
+    '#pbEventEditor .pb-ed-row.pb-ed-row-2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}',
+    '#pbEventEditor input.field{min-width:0;width:100%;max-width:100%;box-sizing:border-box}',
+    '#pbEventEditor input[type="date"],#pbEventEditor input[type="time"]{-webkit-appearance:none;appearance:none;padding-right:6px}',
+    '#pbEventEditor .pb-ed-label{display:grid;gap:6px;min-width:0}',
+    '#pbEventEditor .pb-ed-label>span{font-size:12px;color:#8f8a9c}'
   ].join('');
   document.head.appendChild(css);
 
@@ -197,11 +202,43 @@
     const cell = under && under.closest ? under.closest('.month-cell') : null;
     document.querySelectorAll('.month-cell.pb-drop-active').forEach(function (c) { c.classList.remove('pb-drop-active'); });
     if (cell && cell.dataset.date && cell.dataset.date !== drag.from) cell.classList.add('pb-drop-active');
+    handleEdge(e.clientX);
+  }
+
+  // перетаскивание к левому/правому краю листает месяц
+  function clearEdge() {
+    if (!drag) return;
+    if (drag.edgeTimer) clearTimeout(drag.edgeTimer);
+    drag.edgeTimer = null;
+    drag.edgeDir = 0;
+  }
+  function flipMonth(dir) {
+    if (!drag || drag.edgeDir !== dir) return;
+    const fn = window.shiftMonth;
+    if (typeof fn !== 'function') return;
+    fn(dir);
+    drag.edgeTimer = setTimeout(function () { flipMonth(dir); }, 900);
+  }
+  function handleEdge(x) {
+    if (!drag || !drag.started) return;
+    const grid = document.getElementById(MONTH_GRID);
+    if (!grid) return;
+    const r = grid.getBoundingClientRect();
+    const zone = 60;
+    let dir = 0;
+    if (x < r.left + zone) dir = -1;
+    else if (x > r.right - zone) dir = 1;
+    if (!dir) { clearEdge(); return; }
+    if (drag.edgeDir === dir) return;
+    drag.edgeDir = dir;
+    if (drag.edgeTimer) clearTimeout(drag.edgeTimer);
+    drag.edgeTimer = setTimeout(function () { flipMonth(dir); }, 500);
   }
 
   function onPointerUp(e) {
     if (!drag) return;
     const d = drag;
+    if (d.edgeTimer) clearTimeout(d.edgeTimer);
     drag = null;
     const wasStarted = d.started;
     const target = document.elementFromPoint(e.clientX, e.clientY);
@@ -248,8 +285,8 @@
       '<div class="modal-head"><h2 id="pbEdTitle">Событие</h2><button class="close" type="button" id="pbEdClose">×</button></div>',
       '<div class="form">',
       '<label class="wide">Название<input class="field" id="pbEdName" maxlength="140"></label>',
-      '<div class="pb-ed-row"><label>Дата<input class="field" id="pbEdDate" type="date"></label><label>Время<input class="field" id="pbEdTime" type="time"></label></div>',
-      '<div class="pb-ed-row"><label>Место<input class="field" id="pbEdPlace" maxlength="120"></label><label>Тип<input class="field" id="pbEdType" maxlength="60"></label></div>',
+      '<div class="pb-ed-row"><label class="pb-ed-label"><span>Дата</span><input class="field" id="pbEdDate" type="date"></label><label class="pb-ed-label"><span>Время</span><input class="field" id="pbEdTime" type="time"></label></div>',
+      '<div class="pb-ed-row pb-ed-row-2"><label class="pb-ed-label"><span>Место</span><input class="field" id="pbEdPlace" maxlength="120"></label><label class="pb-ed-label"><span>Тип</span><input class="field" id="pbEdType" maxlength="60"></label></div>',
       '</div>',
       '<div class="form-actions" style="justify-content:space-between">',
       '<button class="btn ghost" type="button" id="pbEdDelete">Удалить</button>',
@@ -341,7 +378,7 @@
     if (!host || host.querySelector('.pb-dnd-hint')) return;
     const hint = document.createElement('div');
     hint.className = 'pb-dnd-hint';
-    hint.innerHTML = icon('arrow-right') + '<span>Потяните событие на другой день, чтобы изменить дату. Клик по событию — редактирование, по пустому месту — новое событие.</span>';
+    hint.innerHTML = icon('arrow-right') + '<span>Потяните событие на другой день (или к краю — календарь перелистнётся), чтобы изменить дату. Клик по событию — редактирование, по пустому месту — новое событие.</span>';
     const grid = document.getElementById(MONTH_GRID);
     if (grid && grid.parentNode === host) host.insertBefore(hint, grid);
     else host.appendChild(hint);
