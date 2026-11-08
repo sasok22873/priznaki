@@ -555,7 +555,7 @@
     try {
       const sess = await client.auth.getSession();
       const user = sess && sess.data && sess.data.session && sess.data.session.user;
-      if (!user) { overlay.classList.add('open'); return; }
+      if (!user) { bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open'); return; }
 
       const { data: prof, error } = await client
         .from('profiles')
@@ -565,14 +565,14 @@
 
       if (error || !prof) {
         console.error('[auth] profile', error);
-        overlay.classList.add('open');
+        bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open');
         showError(profileErrorText(error));
         return;
       }
 
       const status = String(prof.access_status || 'active');
       if (status !== 'active') {
-        overlay.classList.add('open');
+        bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open');
         if (status === 'invited') {
           document.getElementById('authForm').hidden = true;
           document.getElementById('authFoot').hidden = true;
@@ -588,6 +588,8 @@
 
       currentProfile = prof;
       window.__CURRENT_PROFILE__ = prof;
+      bootGateEnd();
+      document.body.classList.remove('pb-locked');
       overlay.classList.remove('open');
       clearError();
       renderWhoami();
@@ -596,7 +598,7 @@
       window.persist = saveAll;
     } catch (e) {
       console.error('[auth] enterApp', e);
-      overlay.classList.add('open');
+      bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open');
       showError('Не удалось загрузить приложение: ' + ((e && e.message) || e));
     } finally {
       entering = false;
@@ -616,19 +618,29 @@
     const box = document.getElementById('whoamiBox');
     if (box && box.parentNode) box.parentNode.removeChild(box);
     window.renderAll && window.renderAll();
-    overlay.classList.add('open');
+    bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open');
     clearError();
+  }
+
+  // Пока не выяснили, кто вошёл, интерфейс скрыт (экран загрузки из index.html).
+  function bootGateEnd() {
+    try {
+      document.documentElement.classList.remove('pb-booting');
+      document.body.classList.remove('pb-booting');
+      var el = document.getElementById('pbBootScreen');
+      if (el) el.style.display = 'none';
+    } catch (e) { }
   }
 
   function init() {
     if (!URL || !KEY) {
-      overlay.classList.add('open');
+      bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open');
       showError('Файл config.js не заполнен. Впишите SUPABASE_URL и SUPABASE_ANON_KEY.');
       document.getElementById('authSubmit').disabled = true;
       return;
     }
     if (!window.supabase || !window.supabase.createClient) {
-      overlay.classList.add('open');
+      bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open');
       showError('Библиотека Supabase не загрузилась. Проверьте интернет и обновите страницу.');
       return;
     }
@@ -731,7 +743,7 @@
         userLoggedOut = false;
         currentProfile = null;
         window.__CURRENT_PROFILE__ = null;
-        overlay.classList.add('open');
+        bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open');
       }
       if (event === 'SIGNED_IN' && !currentProfile && !entering) { enterApp(); }
       if (event === 'TOKEN_REFRESHED') console.info('[auth] токен обновлён');
@@ -750,7 +762,7 @@
         await new Promise(function (res) { setTimeout(res, 400); });
         return restoreSession(1);
       }
-      overlay.classList.add('open');
+      bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open');
     }
     if (!bootSession) restoreSession(0);
   }
@@ -760,7 +772,7 @@
   window.pbAuthExpired = function () {
     try { if (client && client.auth && client.auth.signOut) client.auth.signOut({ scope: 'local' }).catch(function () { }); } catch (e) { }
     try {
-      if (overlay) overlay.classList.add('open');
+      if (overlay) bootGateEnd(); document.body.classList.add('pb-locked'); overlay.classList.add('open');
       if (typeof showError === 'function') showError('Сессия истекла — войдите снова.');
       document.getElementById('authSubmit').disabled = false;
     } catch (e) { console.warn('[auth] pbAuthExpired', e); }
