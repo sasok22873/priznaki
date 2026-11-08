@@ -227,6 +227,12 @@
     if (!client || !currentProfile) return { error: { message: 'Нет активной сессии' } };
     return await client.rpc('admin_set_profile_access', { target_profile_id: profileId, new_access_status: accessStatus });
   };
+  // Полное удаление аккаунта участника. Разрешено только владельцу; проверки
+  // (не себя, не owner) выполняются на сервере в admin_delete_profile.
+  window.deleteTeamProfile = async function (profileId) {
+    if (!client || !currentProfile) return { error: { message: 'Нет активной сессии' } };
+    return await client.rpc('admin_delete_profile', { target_profile_id: profileId });
+  };
   window.updateTeamProfile = async function (profileId, patch) {
     if (!client || !currentProfile) return { error: { message: 'Нет активной сессии' } };
     const args = { target_profile_id: profileId, new_full_name: patch.full_name || '', new_bio: patch.bio || '', new_avatar_url: patch.avatar_url || '' };
