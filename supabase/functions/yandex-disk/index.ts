@@ -248,6 +248,23 @@ Deno.serve(async (req: Request) => {
         return json(res.status, { error: "Не удалось создать папку" });
       }
 
+      case "move": {
+        if (!canWrite) return json(403, { error: "Переименовывать может владелец или участник" });
+        const from = String(payload.from || "");
+        const to = String(payload.to || "");
+        if (!/^disk:\/ПБ24\//.test(from) || !/^disk:\/ПБ24\//.test(to)) return json(400, { error: "Недопустимый путь" });
+        const { data: row } = await admin.from("bank_files").select("uploaded_by").eq("yandex_path", from).maybeSingle();
+        const allowed = isOwner || (row && row.uploaded_by === userId);
+        if (!allowed) return json(403, { error: "Переименовать может автор или владелец" });
+        const res = await diskFetch(
+          `/resources/move?from=${encodeURIComponent(from)}&path=${encodeURIComponent(to)}&overwrite=false`,
+          { method: "POST" },
+        );
+        if (!res.ok) return json(res.status, { error: "Яндекс не смог переименовать файл" });
+        await admin.from("bank_files").update({ yandex_path: to, name: to.split("/").pop() }).eq("yandex_path", from);
+        return json(200, { ok: true, path: to });
+      }
+
       case "delete": {
         const path = String(payload.path || "");
         const { data: row } = await admin.from("bank_files").select("uploaded_by").eq("yandex_path", path).maybeSingle();
