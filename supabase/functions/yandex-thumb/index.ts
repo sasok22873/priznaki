@@ -83,7 +83,12 @@ Deno.serve(async (req: Request) => {
   const imgRes = await fetch(src);
   if (!imgRes.ok) return new Response("image failed", { status: 502, headers: CORS });
   const headers = new Headers(CORS);
-  headers.set("Content-Type", imgRes.headers.get("content-type") || "image/jpeg");
+  headers.set("Content-Type", imgRes.headers.get("content-type") || "application/octet-stream");
   headers.set("Cache-Control", "public, max-age=3600");
+  const inline = url.searchParams.get("dl");
+  if (inline) {
+    const name = path.split("/").pop() || "file";
+    headers.set("Content-Disposition", 'inline; filename="' + name.replace(/["\\]/g, "_") + '"');
+  }
   return new Response(imgRes.body, { status: 200, headers });
 });
