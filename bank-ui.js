@@ -86,6 +86,13 @@
     '.pb-album-badge .pb-icon{width:15px;height:15px}',
     '.pb-card-preview{margin:0 0 14px;border-radius:12px;overflow:hidden;background:#101014;display:grid;place-items:center;max-height:260px}',
     '.pb-card-preview img{width:100%;max-height:260px;object-fit:contain;display:block}',
+    '.pb-viewer-modal{max-width:920px!important;width:min(920px,96vw)!important}',
+    '.pb-viewer-body{display:grid;place-items:center;min-height:200px;max-height:70vh;overflow:hidden;border-radius:14px;background:#0d0d11}',
+    '.pb-viewer-img{max-width:100%;max-height:70vh;object-fit:contain;display:block}',
+    '.pb-viewer-video{max-width:100%;max-height:70vh;display:block;background:#000;border-radius:12px}',
+    '.pb-viewer-audio{width:min(560px,90%);margin:40px 0}',
+    '.pb-viewer-loading{color:#8f8a9c;font-size:13px;padding:40px}',
+    '.pb-viewer-foot{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}',
     '@media (max-width:700px){.pb-bank-grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}.pb-bank-thumb{height:104px}}'
   ].join('');
   document.head.appendChild(css);
@@ -174,15 +181,15 @@
 
   // Скрываем устаревшие блоки старого Банка на облачных вкладках.
   function syncLegacy(tab) {
+    // Старый Банк больше не показываем: карточки и файлы — только наши.
     const box = document.getElementById('bankContent');
     if (!box) return;
-    const showLegacy = tab === 'lyrics';
     Array.prototype.forEach.call(box.children, function (el) {
       if (el.id === 'pbBankCloudSection' || el.getAttribute('data-bank-mode') === 'cloud') return;
-      el.style.display = showLegacy ? '' : 'none';
+      el.style.display = 'none';
     });
     const actions = document.querySelector('#bank > .bank-actions');
-    if (actions) actions.style.display = showLegacy ? '' : 'none';
+    if (actions) actions.style.display = 'none';
   }
 
   function pageLimit(key) { return state.page[key] || 24; }
@@ -192,17 +199,47 @@
     if (items.length <= shown) return '';
     return '<div class="pb-bank-more"><button class="btn ghost tiny" type="button" data-bank-more="' + esc(key) + '">Показать ещё (' + (items.length - shown) + ')</button></div>';
   }
+  // Сжатые превью держим только в памяти браузера: в базе полноразмерные картинки не нужны,
+  // оригиналы остаются в облаке в исходном качестве.
+  const thumbCache = {};
+  function cacheDownscaled(img, path) {
+    try {
+      if (!path || !img.naturalWidth || !img.naturalHeight) return;
+      const max = 640;
+      const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      if (scale >= 1) return;
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      const data = c.toDataURL('image/jpeg', 0.82);
+      thumbCache[path] = data;
+      img.src = data;
+    } catch (e) { /* чужие картинки без CORS не трогаем */ }
+  }
+
   async function hydrateThumbs(root) {
     const imgs = (root || document).querySelectorAll('img[data-thumb]');
     for (const img of Array.from(imgs)) {
       if (img.dataset.hydrated === '1') continue;
       img.dataset.hydrated = '1';
       const path = img.getAttribute('data-thumb');
-      img.addEventListener('error', async function handler() {
+      if (path && thumbCache[path]) { img.src = thumbCache[path]; continue; }
+      const applyProxy = async function () {
+        const u = await thumbUrlFor(path);
+        if (!u) { img.remove(); return; }
+        img.crossOrigin = 'anonymous';
+        img.addEventListener('load', function once() {
+          img.removeEventListener('load', once);
+          cacheDownscaled(img, path);
+        }, { once: true });
+        img.src = u;
+      };
+      img.addEventListener('error', function handler() {
         img.removeEventListener('error', handler);
         if (!path) { img.remove(); return; }
-        const u = await thumbUrlFor(path);
-        if (u) img.src = u; else img.remove();
+        applyProxy();
       });
       if (img.dataset.preview && !img.getAttribute('src')) img.src = img.dataset.preview;
     }
@@ -345,7 +382,9 @@
             folder: folderName || '',
             uploaded_by: me.id || null,
             owner_name: me.full_name || '',
-            preview_url: item.preview || ''
+            note: '',
+            icon: '',
+            preview_url: ''
           }, { onConflict: 'yandex_path' });
         }
         ok++;
@@ -359,9 +398,75 @@
   }
 
   async function openFile(item) {
+    const kind = kindOfFile(item.name, item.mime);
+    const isText = /\.(txt|md|csv|json)$/i.test(item.name) || String(item.mime || '').indexOf('text/') === 0;
+    if (isText) { openFileCard(item); return; }
+    if (kind === 'photos') { openViewer(item, 'image'); return; }
+    if (kind === 'audio') { openViewer(item, 'audio'); return; }
+    if (kind === 'video') { openViewer(item, 'video'); return; }
     const u = await fileProxyUrl(item.path);
     if (!u) { toast('Нет доступа к файлу'); return; }
     window.open(u, '_blank', 'noopener');
+  }
+
+  // ---------- просмотр файла прямо из облака (без страниц Supabase) ----------
+  let viewerItem = null;
+  function ensureViewer() {
+    if (document.getElementById('pbViewer')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'modal-back';
+    wrap.id = 'pbViewer';
+    wrap.innerHTML = [
+      '<div class="modal pb-viewer-modal" role="dialog" aria-modal="true">',
+      '<div class="modal-head"><h2 id="pbViewerTitle">Файл</h2><button class="close" type="button" id="pbViewerClose">×</button></div>',
+      '<div class="pb-viewer-body" id="pbViewerBody"></div>',
+      '<div class="pb-viewer-foot">',
+      '<button class="btn ghost tiny" type="button" id="pbViewerCard">Карточка</button>',
+      '<button class="btn ghost tiny" type="button" id="pbViewerCloud">Открыть в Яндекс.Диске</button>',
+      '<button class="btn ghost tiny" type="button" id="pbViewerDownload">Скачать</button>',
+      '</div>',
+      '</div>'
+    ].join('');
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', function (e) { if (e.target === wrap) closeViewer(); });
+    document.getElementById('pbViewerClose').onclick = closeViewer;
+    document.getElementById('pbViewerCard').onclick = function () { const it = viewerItem; closeViewer(); if (it) openFileCard(it); };
+    document.getElementById('pbViewerCloud').onclick = openInCloud;
+    document.getElementById('pbViewerDownload').onclick = async function () {
+      if (!viewerItem) return;
+      const u = await fileProxyUrl(viewerItem.path);
+      if (u) window.open(u, '_blank', 'noopener');
+    };
+  }
+  async function openViewer(item, type) {
+    ensureViewer();
+    viewerItem = item;
+    const body = document.getElementById('pbViewerBody');
+    document.getElementById('pbViewerTitle').textContent = item.name || 'Файл';
+    body.innerHTML = '<div class="pb-viewer-loading">Загружаем из облака…</div>';
+    document.getElementById('pbViewer').classList.add('open');
+    const u = await fileProxyUrl(item.path);
+    if (!u) { body.innerHTML = '<div class="pb-viewer-loading">Нет доступа к файлу</div>'; return; }
+    if (type === 'image') {
+      body.innerHTML = '<img class="pb-viewer-img" src="' + esc(u) + '" alt="">';
+    } else if (type === 'audio') {
+      body.innerHTML = '<audio class="pb-viewer-audio" controls preload="metadata" src="' + esc(u) + '"></audio>';
+    } else {
+      body.innerHTML = '<video class="pb-viewer-video" controls preload="metadata" playsinline src="' + esc(u) + '"></video>';
+    }
+  }
+  function closeViewer() {
+    const el = document.getElementById('pbViewer');
+    if (el) el.classList.remove('open');
+    const body = document.getElementById('pbViewerBody');
+    if (body) body.innerHTML = '';
+    viewerItem = null;
+  }
+  async function openInCloud() {
+    if (!viewerItem) return;
+    const r = await callFn({ action: 'public-url', path: viewerItem.path });
+    if (r.error || !r.data || !r.data.url) { toast('Не удалось получить ссылку на облако'); return; }
+    window.open(r.data.url, '_blank', 'noopener');
   }
 
   async function deleteFile(item) {
@@ -472,13 +577,89 @@
     if (el) el.classList.remove('open');
     cardCtx = null;
   }
+
+  // Новая песня: та же карточка, что и при редактировании; сохраняется в облако как .txt
+  function openNewLyric() {
+    ensureFileCard();
+    cardCtx = {
+      isNew: true,
+      item: { name: '', mime: 'text/plain', size: 0, path: '', preview: '' },
+      row: {},
+      originalName: '',
+      originalText: ''
+    };
+    cardIcon = '';
+    document.getElementById('pbCardMeta').textContent = 'Новая карточка песни · сохранится в «' + FOLDERS.lyrics + '» как .txt';
+    document.getElementById('pbCardName').value = '';
+    document.getElementById('pbCardNote').value = '';
+    const textWrap = document.getElementById('pbCardTextWrap');
+    textWrap.hidden = false;
+    document.getElementById('pbCardText').value = '';
+    const prev = document.getElementById('pbCardPreview');
+    prev.hidden = true;
+    prev.innerHTML = '';
+    paintCardIcon();
+    document.getElementById('pbCardDelete').style.display = 'none';
+    document.getElementById('pbFileCard').classList.add('open');
+    setTimeout(function () { document.getElementById('pbCardName').focus(); }, 60);
+  }
+
+  async function saveNewLyric() {
+    const nameEl = document.getElementById('pbCardName');
+    const btn = document.getElementById('pbCardSave');
+    const name = nameEl.value.trim();
+    if (!name) { toast('Введите название песни'); nameEl.focus(); return; }
+    const text = document.getElementById('pbCardText').value;
+    const note = document.getElementById('pbCardNote').value;
+    const fileName = name.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120) + '.txt';
+    const path = ROOT + '/' + FOLDERS.lyrics + '/' + fileName;
+    btn.disabled = true;
+    const oldLabel = btn.textContent;
+    btn.textContent = 'Сохраняем…';
+    try {
+      const link = await callFn({ action: 'upload-link', path: path });
+      if (link.error) { toast('Не сохранилось: ' + link.error.message); return; }
+      const put = await fetch(link.data.href, {
+        method: link.data.method || 'PUT',
+        body: new Blob([text], { type: 'text/plain;charset=utf-8' })
+      });
+      if (!put.ok) { toast('Яндекс не принял файл'); return; }
+      const me = window.__CURRENT_PROFILE__ || {};
+      if (window.supabaseClient) {
+        await window.supabaseClient.from('bank_files').upsert({
+          yandex_path: path,
+          name: fileName,
+          mime: 'text/plain',
+          kind: 'docs',
+          size: new Blob([text]).size,
+          folder: FOLDERS.lyrics,
+          uploaded_by: me.id || null,
+          owner_name: me.full_name || '',
+          note: note,
+          icon: cardIcon,
+          preview_url: ''
+        }, { onConflict: 'yandex_path' });
+      }
+      state.cache = {};
+      state.albumCache = {};
+      state.metaMap = {};
+      closeFileCard();
+      toast('Карточка песни создана');
+      await render(true, 'lyrics');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = oldLabel;
+    }
+  }
   window.pbBankFileCard = function (path) {
     const item = (state.allItems || []).find(function (i) { return i.path === path; });
     if (item) openFileCard(item);
   };
+  window.pbBankNewLyric = openNewLyric;
 
   async function saveFileCard() {
     if (!cardCtx) return;
+    if (cardCtx.isNew) return saveNewLyric();
     const item = cardCtx.item;
     const btn = document.getElementById('pbCardSave');
     const nameEl = document.getElementById('pbCardName');
@@ -520,7 +701,7 @@
           owner_name: (cardCtx.row && cardCtx.row.owner_name) || me.full_name || '',
           note: note,
           icon: cardIcon,
-          preview_url: item.preview || ''
+          preview_url: ''
         }, { onConflict: 'yandex_path' });
         if (targetPath !== item.path) {
           try { await window.supabaseClient.from('bank_files').delete().eq('yandex_path', item.path); } catch (e) { }
@@ -957,7 +1138,8 @@
     let extra = '';
     if (tab === 'lyrics') {
       const pending = localLyrics().length;
-      extra = '<button class="btn ghost tiny" type="button" onclick="pbBankExportLyrics()">↥ Выгрузить тексты в облако' + (pending ? ' (' + pending + ')' : '') + '</button>';
+      extra = '<button class="btn red tiny" type="button" onclick="pbBankNewLyric()">＋ Новая песня</button>' +
+        '<button class="btn ghost tiny" type="button" onclick="pbBankExportLyrics()">↥ Старые тексты в облако' + (pending ? ' (' + pending + ')' : '') + '</button>';
     }
     const albumsHtml = res.dirs.length
       ? '<div class="pb-bank-cloud-head"><h2 style="margin:0;font-size:16px">Альбомы (подпапки)</h2><span class="pb-bank-hint">Обложка — первое фото из папки</span></div>' + await albumsHTML(res.dirs)
