@@ -3,3 +3,6 @@ verify_jwt = true
 
 [functions.yandex-disk]
 verify_jwt = true
+
+[functions.yandex-thumb]
+verify_jwt = false
