@@ -226,7 +226,7 @@
       img.dataset.hydrated = '1';
       const path = img.getAttribute('data-thumb');
       if (path && thumbCache[path]) { img.src = thumbCache[path]; continue; }
-      const applyProxy = async function () {
+      const applyProxy = async function (retry) {
         const u = await thumbUrlFor(path);
         if (!u) { img.remove(); return; }
         img.crossOrigin = 'anonymous';
@@ -234,18 +234,27 @@
           img.removeEventListener('load', once);
           cacheDownscaled(img, path);
         }, { once: true });
+        img.addEventListener('error', function retryOnce() {
+          img.removeEventListener('error', retryOnce);
+          if (retry) {
+            setTimeout(function () { img.src = u + '&r=' + Date.now(); }, 900);
+          } else {
+            img.remove();
+          }
+        }, { once: true });
         img.src = u;
       };
       img.addEventListener('error', function handler() {
         img.removeEventListener('error', handler);
         if (!path) { img.remove(); return; }
-        applyProxy();
+        applyProxy(true);
       });
       if (img.dataset.preview && !img.getAttribute('src')) img.src = img.dataset.preview;
     }
   }
 
   async function callFn(body) {
+    if (!window.__CURRENT_PROFILE__) return { error: { message: 'Нет активной сессии' } };
     const c = window.supabaseClient;
     if (!c || !c.functions) return { error: { message: 'Нет подключения к Supabase' } };
     const res = await c.functions.invoke(FN, { body: body });
