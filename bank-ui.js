@@ -27,9 +27,13 @@
     canWrite: false,
     notice: '',
     folders: [],
-    cache: {},        // path -> items
+    cache: {},
+    albumCache: {},
     busy: false,
-    started: false
+    started: false,
+    folder: '',
+    album: null,
+    albumName: ''
   };
 
   const css = document.createElement('style');
@@ -115,6 +119,43 @@
     return FOLDERS[tab] ? ROOT + '/' + FOLDERS[tab] : ROOT;
   }
 
+  // Превью идут через Edge Function yandex-thumb: токен Диска в браузер не попадает.
+  function supaBase() {
+    const u = window.SUPABASE_URL || '';
+    return (u || 'https://mbbetmtxawduvcsttiis.supabase.co').replace(/\/+$/, '');
+  }
+  async function accessToken() {
+    try {
+      if (state.tok && state.tokExp && Date.now() < state.tokExp - 30000) return state.tok;
+      const { data } = await window.supabaseClient.auth.getSession();
+      const s = data && data.session;
+      if (!s) return '';
+      state.tok = s.access_token;
+      state.tokExp = (s.expires_at || 0) * 1000;
+      return state.tok;
+    } catch (e) { return ''; }
+  }
+  async function thumbUrlFor(path) {
+    const t = await accessToken();
+    if (!t) return '';
+    return supaBase() + '/functions/v1/yandex-thumb?p=' + encodeURIComponent(path) + '&t=' + encodeURIComponent(t);
+  }
+  async function hydrateThumbs(root) {
+    const imgs = (root || document).querySelectorAll('img[data-thumb]');
+    for (const img of Array.from(imgs)) {
+      if (img.dataset.hydrated === '1') continue;
+      img.dataset.hydrated = '1';
+      const path = img.getAttribute('data-thumb');
+      img.addEventListener('error', async function handler() {
+        img.removeEventListener('error', handler);
+        if (!path) { img.remove(); return; }
+        const u = await thumbUrlFor(path);
+        if (u) img.src = u; else img.remove();
+      });
+      if (img.dataset.preview && !img.getAttribute('src')) img.src = img.dataset.preview;
+    }
+  }
+
   async function callFn(body) {
     const c = window.supabaseClient;
     if (!c || !c.functions) return { error: { message: 'Нет подключения к Supabase' } };
@@ -171,16 +212,31 @@
   async function listFolder(path) {
     if (state.cache[path]) return state.cache[path];
     const res = await callFn({ action: 'list', path: path });
-    const items = (res.error ? [] : (res.data.items || [])).filter(function (it) { return it.type === 'file'; });
-    state.cache[path] = items;
-    return items;
+    const all = (res.error ? [] : (res.data.items || []));
+    const entry = {
+      files: all.filter(function (it) { return it.type === 'file'; }),
+      dirs: all.filter(function (it) { return it.type === 'dir'; })
+    };
+    state.cache[path] = entry;
+    return entry;
+  }
+
+  async function albumInfo(dir) {
+    if (state.albumCache[dir.path]) return state.albumCache[dir.path];
+    const res = await listFolder(dir.path);
+    const photos = res.files.filter(function (f) { return kindOfFile(f.name, f.mime) === 'photos'; });
+    const coverItem = photos.find(function (f) { return !!f.preview; }) || res.files.find(function (f) { return !!f.preview; }) || null;
+    const info = { dir: dir, files: res.files, photos: photos, cover: coverItem ? coverItem.preview : '', coverPath: coverItem ? coverItem.path : '', count: photos.length || res.files.length };
+    state.albumCache[dir.path] = info;
+    return info;
   }
 
   // ---------- загрузка ----------
-  async function uploadFiles(files, tab) {
+  async function uploadFiles(files, tab, targetPath) {
     if (!files || !files.length) return;
     if (!state.canWrite) { toast('Загружать файлы может владелец или участник'); return; }
-    const folder = tabFolder(tab);
+    const folder = targetPath ? String(targetPath).replace(/\/+$/, '') : tabFolder(tab);
+    const folderName = targetPath ? String(targetPath).split('/').pop() : (FOLDERS[tab] || '');
     const me = window.__CURRENT_PROFILE__ || {};
     let ok = 0;
     for (const file of Array.from(files)) {
@@ -200,7 +256,7 @@
             mime: item.mime || file.type || '',
             kind: kindOfFile(safe, item.mime || file.type),
             size: Number(item.size || file.size || 0),
-            folder: FOLDERS[tab] || '',
+            folder: folderName || '',
             uploaded_by: me.id || null,
             owner_name: me.full_name || '',
             preview_url: item.preview || ''
@@ -212,6 +268,7 @@
       }
     }
     state.cache = {};
+    state.albumCache = {};
     if (ok) { toast(ok === 1 ? 'Файл загружен в облако' : 'Загружено файлов: ' + ok); await render(true); }
   }
 
@@ -226,6 +283,7 @@
     const r = await callFn({ action: 'delete', path: item.path });
     if (r.error) { toast(r.error.message); return; }
     state.cache = {};
+    state.albumCache = {};
     toast('Файл удалён');
     await render(true);
   }
@@ -294,9 +352,9 @@
 
   function fileCard(item, tab) {
     const kind = kindOfFile(item.name, item.mime);
-    const isPhoto = kind === 'photos' && item.preview;
+    const isPhoto = kind === 'photos';
     const thumb = isPhoto
-      ? '<div class="pb-bank-thumb"><img src="' + esc(item.preview) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' + icon(iconForKind(kind), 'pb-icon-lg') + '</div>'
+      ? '<div class="pb-bank-thumb"><img src="' + esc(item.preview || '') + '" data-preview="' + esc(item.preview || '') + '" data-thumb="' + esc(item.path) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' + icon(iconForKind(kind), 'pb-icon-lg') + '</div>'
       : '<div class="pb-bank-thumb">' + icon(iconForKind(kind), 'pb-icon-lg') + '</div>';
     const meta = state.metaMap && state.metaMap[item.path];
     const author = meta && meta.owner_name ? '<span>· ' + esc(meta.owner_name) + '</span>' : '';
@@ -327,7 +385,113 @@
     return '<div class="pb-bank-grid">' + items.map(function (it) { return fileCard(it); }).join('') + '</div>';
   }
 
-  // вкладка «Облако»: папки + все файлы
+  function albumCard(info) {
+    const cover = info.coverPath
+      ? '<img src="' + esc(info.cover || '') + '" data-preview="' + esc(info.cover || '') + '" data-thumb="' + esc(info.coverPath) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' + icon('images', 'pb-icon-lg')
+      : icon('images', 'pb-icon-lg');
+    return '<div class="pb-bank-card">' +
+      '<div class="pb-bank-thumb">' + cover + '</div>' +
+      '<div class="pb-bank-body"><div class="pb-bank-name">' + esc(info.dir.name) + '</div>' +
+      '<div class="pb-bank-sub"><span>' + info.count + ' фото</span><span>· альбом</span></div>' +
+      '<div class="pb-bank-actions"><button class="btn tiny" type="button" data-bank-album="' + esc(info.dir.path) + '">Открыть альбом</button></div></div></div>';
+  }
+
+  async function albumsHTML(dirs) {
+    if (!dirs || !dirs.length) return '';
+    const infos = [];
+    for (const d of dirs) infos.push(await albumInfo(d));
+    return '<div class="pb-bank-grid">' + infos.map(albumCard).join('') + '</div>';
+  }
+
+  function backBar(title, countText) {
+    return '<div class="pb-bank-cloud-head">' +
+      '<button class="btn ghost tiny" type="button" onclick="pbBankAlbumBack()">← Назад</button>' +
+      '<h2 style="margin:0;font-size:17px">' + esc(title) + '</h2>' +
+      '<span class="pb-bank-hint">' + esc(countText) + '</span>' +
+      (state.canWrite ? '<button class="btn ghost tiny" type="button" onclick="pbBankPick()">＋ Загрузить в альбом</button>' : '') +
+      '</div>';
+  }
+
+  // ---------- тексты песен → облако (.txt) ----------
+  function lyricText(item) {
+    if (item && Array.isArray(item.sections) && item.sections.length) {
+      return item.sections.map(function (s) { return '[' + (s.type || 'Часть') + ']\n' + (s.text || ''); }).join('\n\n');
+    }
+    return (item && item.text) || '';
+  }
+  function textHash(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return String(h);
+  }
+  function localLyrics() {
+    try {
+      if (typeof bank !== 'undefined' && Array.isArray(bank)) return bank.filter(function (x) { return x && x.type === 'lyrics'; });
+    } catch (e) { }
+    return [];
+  }
+  async function exportLyrics(force) {
+    if (!state.connected || !state.canWrite) return 0;
+    const items = localLyrics();
+    if (!items.length) return 0;
+    let exported = {};
+    try { exported = JSON.parse(localStorage.getItem('pb24_lyrics_exported') || '{}') || {}; } catch (e) { exported = {}; }
+    const me = window.__CURRENT_PROFILE__ || {};
+    let count = 0;
+    for (const item of items) {
+      const title = String(item.title || '').trim();
+      if (!title) continue;
+      const body = lyricText(item).trim();
+      if (!body) continue;
+      const hash = textHash(body);
+      if (!force && exported[title] === hash) continue;
+      try {
+        const safe = title.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 100) + '.txt';
+        const path = ROOT + '/01_Тексты/' + safe;
+        const link = await callFn({ action: 'upload-link', path: path });
+        if (link.error) continue;
+        const put = await fetch(link.data.href, { method: link.data.method || 'PUT', body: new Blob([body], { type: 'text/plain;charset=utf-8' }) });
+        if (!put.ok) continue;
+        const st = await callFn({ action: 'stat', path: path });
+        const it = (st.data && st.data.item) || {};
+        if (window.supabaseClient) {
+          await window.supabaseClient.from('bank_files').upsert({
+            yandex_path: path,
+            name: safe,
+            mime: 'text/plain',
+            kind: 'docs',
+            size: Number(it.size || body.length || 0),
+            folder: '01_Тексты',
+            uploaded_by: me.id || null,
+            owner_name: me.full_name || '',
+            preview_url: ''
+          }, { onConflict: 'yandex_path' });
+        }
+        exported[title] = hash;
+        count++;
+      } catch (e) { console.warn('[bank] lyric export', e); }
+    }
+    if (count) {
+      try { localStorage.setItem('pb24_lyrics_exported', JSON.stringify(exported)); } catch (e) { }
+      state.cache = {};
+    }
+    return count;
+  }
+
+  // Сохранение карточки текста автоматически выгружает .txt в облако.
+  function hookPersist() {
+    const cur = window.persist;
+    if (!cur || cur.__pbBankWrapped) return;
+    const wrapped = function () {
+      const res = cur.apply(this, arguments);
+      if (state.connected && state.canWrite) setTimeout(function () { exportLyrics(false); }, 700);
+      return res;
+    };
+    wrapped.__pbBankWrapped = true;
+    window.persist = wrapped;
+  }
+
+  // ---------- вкладка «Облако» ----------
   async function renderCloudTab(tab) {
     const box = document.getElementById('bankContent');
     if (!box) return;
@@ -337,26 +501,45 @@
       folders.map(function (n) {
         return '<button type="button" class="pb-bank-folder' + (state.folder === n ? ' active' : '') + '" data-bank-folder="' + esc(n) + '">' + icon('folder') + ' ' + esc(n) + '</button>';
       }).join('') + '</div>';
-    let items = [];
-    if (state.folder) {
-      items = await listFolder(ROOT + '/' + state.folder);
+
+    let html = '';
+    if (state.album) {
+      const res = await listFolder(state.album);
+      state.allItems = res.files;
+      await loadMeta(res.files);
+      html = backBar(state.albumName || 'Альбом', res.files.length + ' файлов') +
+        gridHTML(res.files, 'В этом альбоме пока нет файлов.') +
+        '<div class="pb-bank-drop" id="pbBankDrop">Перетащите файлы сюда — они загрузятся в альбом</div>' +
+        '<input type="file" id="pbBankInput" multiple hidden>';
+    } else if (state.folder) {
+      const res = await listFolder(ROOT + '/' + state.folder);
+      state.allItems = res.files;
+      await loadMeta(res.files);
+      const albumsHtml = res.dirs.length ? '<div class="pb-bank-cloud-head"><h2 style="margin:0;font-size:16px">Альбомы (подпапки)</h2><span class="pb-bank-hint">Обложка — первое фото из папки</span></div>' + await albumsHTML(res.dirs) : '';
+      html = albumsHtml + gridHTML(res.files, 'В папке «' + state.folder + '» пока нет файлов.') +
+        '<div class="pb-bank-drop" id="pbBankDrop">Перетащите файлы сюда — они загрузятся в «' + esc(state.folder) + '»</div>' +
+        '<input type="file" id="pbBankInput" multiple hidden>';
     } else {
-      // «Все файлы»: корень + каждая папка
-      const rootItems = await listFolder(ROOT);
-      items = rootItems.slice();
+      // «Все файлы»: корень + каждая папка (с обложками альбомов)
+      const rootRes = await listFolder(ROOT);
+      let items = rootRes.files.slice();
+      let albums = [];
       for (const n of Object.keys(FOLDERS).map(function (k) { return FOLDERS[k]; })) {
         if (folders.indexOf(n) === -1) continue;
         const sub = await listFolder(ROOT + '/' + n);
-        if (sub && sub.length) state.folderOf = state.folderOf || {};
-        for (const it of sub) { it.folderName = n; items.push(it); }
+        for (const d of sub.dirs) albums.push(d);
+        for (const it of sub.files) { it.folderName = n; items.push(it); }
       }
+      await loadMeta(items);
+      state.allItems = items;
+      html = (albums.length ? '<div class="pb-bank-cloud-head"><h2 style="margin:0;font-size:16px">Альбомы</h2><span class="pb-bank-hint">' + albums.length + ' шт.</span></div>' + await albumsHTML(albums) : '') +
+        gridHTML(items, 'Файлов пока нет. Нажмите «Загрузить», чтобы положить их в облако.') +
+        '<div class="pb-bank-drop" id="pbBankDrop">Перетащите файлы сюда — они загрузятся в корень Банка</div>' +
+        '<input type="file" id="pbBankInput" multiple hidden>';
     }
-    await loadMeta(items);
-    state.allItems = items;
-    box.innerHTML = '<div class="pb-bank-cloud" data-bank-mode="cloud">' + chips + gridHTML(items, 'Перетащите файлы вниз или нажмите «Загрузить», чтобы положить их в облако.') +
-      '<div class="pb-bank-drop" id="pbBankDrop">Перетащите файлы сюда — они загрузятся в «' + esc(state.folder || 'ПБ24') + '»</div>' +
-      '<input type="file" id="pbBankInput" multiple hidden></div>';
+    box.innerHTML = '<div class="pb-bank-cloud" data-bank-mode="cloud">' + chips + html + '</div>';
     wire(box, tab || 'cloud');
+    hydrateThumbs(box);
     if (!state.folders.length) {
       await ensureFolders();
       state.cache = {};
@@ -364,17 +547,13 @@
     }
   }
 
-  // обычные вкладки: карточки сверху, файлы облака снизу
+  // ---------- обычные вкладки: карточки сверху, облако снизу ----------
   async function decorateTab(tab) {
     const box = document.getElementById('bankContent');
     if (!box || tab === 'cloud') return;
     const folder = FOLDERS[tab];
     if (!folder) return;
     if (!state.folders.length) await ensureFolders();
-    const path = tabFolder(tab);
-    const items = await listFolder(path);
-    state.allItems = items;
-    await loadMeta(items);
     let section = document.getElementById('pbBankCloudSection');
     if (!section) {
       section = document.createElement('div');
@@ -382,27 +561,75 @@
       section.className = 'pb-bank-cloud';
       box.appendChild(section);
     }
+
+    if (state.album) {
+      const res = await listFolder(state.album);
+      state.allItems = res.files;
+      await loadMeta(res.files);
+      section.innerHTML = backBar(state.albumName || 'Альбом', res.files.length + ' файлов') +
+        gridHTML(res.files, 'В этом альбоме пока нет файлов.') +
+        '<div class="pb-bank-drop" id="pbBankDrop">Перетащите файлы сюда — они загрузятся в альбом</div>' +
+        '<input type="file" id="pbBankInput" multiple hidden>';
+      wire(box, tab);
+    hydrateThumbs(box);
+      return;
+    }
+
+    const path = tabFolder(tab);
+    const res = await listFolder(path);
+    state.allItems = res.files;
+    await loadMeta(res.files);
+
+    let extra = '';
+    if (tab === 'lyrics') {
+      const pending = localLyrics().length;
+      extra = '<button class="btn ghost tiny" type="button" onclick="pbBankExportLyrics()">↥ Выгрузить тексты в облако' + (pending ? ' (' + pending + ')' : '') + '</button>';
+    }
+    const albumsHtml = res.dirs.length
+      ? '<div class="pb-bank-cloud-head"><h2 style="margin:0;font-size:16px">Альбомы (подпапки)</h2><span class="pb-bank-hint">Обложка — первое фото из папки</span></div>' + await albumsHTML(res.dirs)
+      : '';
+
     section.innerHTML = '<div class="pb-bank-cloud-head"><h2>Файлы в облаке</h2>' +
       '<span class="pb-bank-hint">Папка «' + esc(folder) + '» в Яндекс.Диске</span>' +
+      extra +
       (state.canWrite ? '<button class="btn ghost tiny" type="button" onclick="pbBankPick(\'' + esc(tab) + '\')">＋ Загрузить</button>' : '') +
-      '</div>' +
-      gridHTML(items, 'В папке «' + folder + '» пока нет файлов.') +
+      '</div>' + albumsHtml +
+      gridHTML(res.files, 'В папке «' + folder + '» пока нет файлов.') +
       '<div class="pb-bank-drop" id="pbBankDrop">Перетащите файлы сюда — они загрузятся в «' + esc(folder) + '»</div>' +
       '<input type="file" id="pbBankInput" multiple hidden>';
     wire(box, tab);
+    hydrateThumbs(box);
+
+    if (tab === 'lyrics') {
+      exportLyrics(false).then(function (n) { if (n) render(false, 'lyrics'); });
+    }
   }
 
   function wire(box, tab) {
     const input = document.getElementById('pbBankInput');
-    if (input) { input.dataset.tab = tab || currentTab(); }
+    if (input) { input.dataset.tab = tab || currentTab(); input.dataset.album = state.album || ''; }
     const drop = document.getElementById('pbBankDrop');
     if (drop) {
       ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
       ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
-      drop.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files) uploadFiles(e.dataTransfer.files, tab || currentTab()); });
+      drop.addEventListener('drop', function (e) {
+        if (e.dataTransfer && e.dataTransfer.files) uploadFiles(e.dataTransfer.files, tab || currentTab(), state.album || null);
+      });
     }
     box.querySelectorAll('[data-bank-folder]').forEach(function (b) {
-      b.onclick = function () { state.folder = b.getAttribute('data-bank-folder'); state.cache = {}; render(true, 'cloud'); };
+      b.onclick = function () {
+        state.folder = b.getAttribute('data-bank-folder');
+        state.album = null; state.albumName = '';
+        state.cache = {}; state.albumCache = {};
+        render(true, 'cloud');
+      };
+    });
+    box.querySelectorAll('[data-bank-album]').forEach(function (b) {
+      b.onclick = function () {
+        state.album = b.getAttribute('data-bank-album');
+        state.albumName = state.album.split('/').pop();
+        render(true, currentTab());
+      };
     });
     box.querySelectorAll('[data-bank-open]').forEach(function (b) {
       b.onclick = function () {
@@ -450,6 +677,7 @@
       return;
     }
     if (!state.folders.length || force) await ensureFolders();
+    hookPersist();
     host.innerHTML = (state.notice ? '<div class="pb-bank-notice">' + esc(state.notice) + '</div>' : '') + toolbar();
     if (tab === 'cloud') await renderCloudTab(tab);
     else await decorateTab(tab);
@@ -460,18 +688,28 @@
   window.pbBankConnect = connectWithCode;
   window.pbBankDisconnect = disconnect;
   window.pbBankFolder = createFolder;
-  window.pbBankReload = function () { state.cache = {}; render(true); };
+  window.pbBankReload = function () { state.cache = {}; state.albumCache = {}; render(true); };
   window.__pbBankDebug = state;
   window.pbBankPick = function (tab) {
     const i = document.getElementById('pbBankInput');
-    if (i) { i.dataset.tab = tab || currentTab(); i.click(); }
+    if (i) { i.dataset.tab = tab || currentTab(); i.dataset.album = state.album || ''; i.click(); }
+  };
+  window.pbBankAlbumBack = function () {
+    state.album = null; state.albumName = '';
+    render(true, currentTab());
+  };
+  window.pbBankExportLyrics = async function () {
+    const n = await exportLyrics(true);
+    toast(n ? 'Выгружено текстов: ' + n : 'Все тексты уже в облаке');
+    if (n) render(true, 'lyrics');
   };
 
-  // перехват выбора файлов: tab берём из data-атрибута
+  // перехват выбора файлов: tab и альбом берём из data-атрибутов
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'pbBankInput') {
       const tab = e.target.dataset.tab || currentTab();
-      if (e.target.files && e.target.files.length) { uploadFiles(e.target.files, tab); e.target.value = ''; }
+      const album = e.target.dataset.album || null;
+      if (e.target.files && e.target.files.length) { uploadFiles(e.target.files, tab, album); e.target.value = ''; }
     }
   }, true);
 
@@ -505,6 +743,7 @@
     if (nav) { state.started = false; setTimeout(function () { onBankChanged(); }, 60); }
     else if (tabBtn) {
       const tab = tabBtn.getAttribute('data-bank');
+      state.album = null; state.albumName = '';
       lastTab = tab;
       setTimeout(function () { rendering = false; render(false, tab); }, 120);
     }
