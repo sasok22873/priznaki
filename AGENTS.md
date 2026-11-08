@@ -17,7 +17,7 @@
 ## Жёсткие правила
 1. Ключ `service_role` никогда не попадает в браузерный код, `config.js`, коммит, README, скриншот или чат. Он живёт только в секретах Supabase.
 2. Перед любым SQL, меняющим RLS, — резервная копия базы.
-3. Порядок SQL: сначала `team-access-migration.sql`, потом `supabase/migrations/20261108_team_approval.sql`.
+3. Порядок SQL строгий: 1) `team-access-migration.sql`, 2) `supabase/migrations/20261108_team_approval.sql`, 3) `supabase/migrations/20261108_delete_member.sql`.
 4. `index.html` не переписываем целиком — только точечные правки. Строки там огромные, поэтому правим по уникальному фрагменту, а не по номеру строки.
 5. Перед отдачей файла: `node --check supabase-layer.js` и проверка консоли браузера (F12 → Console, красных строк нет).
 6. Не выдумывать имена функций, таблиц и полей. Не уверен — смотри файлы.
