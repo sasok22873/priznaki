@@ -1,5 +1,7 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b0b0f"><title>ПРИЗНАКИ БЕШЕНСТВА 24 — штаб группы</title>
+<link rel="preconnect" href="https://mbbetmtxawduvcsttiis.supabase.co" crossorigin>
+<link rel="dns-prefetch" href="https://mbbetmtxawduvcsttiis.supabase.co">
 <style>
 /* =========================================================================
    ПРИЗНАКИ БЕШЕНСТВА 24 — Apple-style dark UI
@@ -2747,7 +2749,7 @@ let events=[];
 let money=[];
 let members=[];
 let supportTickets=[];let bank=[];let bankTab='lyrics',budgetTab='summary',taskView='list',calView='month',monthDate=new Date(),editingLyricTitle=null,editingAudioTitle=null;
-try{let saved=JSON.parse(localStorage.getItem('pb24_release_v11')||'null');if(saved){tasks=saved.tasks||tasks;projects=saved.projects||projects;goals=saved.goals||goals;events=saved.events||events;money=saved.money||money;members=saved.members||members;bank=saved.bank||bank;supportTickets=saved.supportTickets||supportTickets}}catch(e){}function persist(){localStorage.setItem('pb24_release_v11',JSON.stringify({tasks,projects,goals,events,money,members,bank,supportTickets}))}
+try{let saved=JSON.parse(localStorage.getItem('pb24_release_v11')||'null');if(saved){tasks=saved.tasks||tasks;projects=saved.projects||projects;goals=saved.goals||goals;events=saved.events||events;money=saved.money||money;members=saved.members||members;bank=saved.bank||bank;supportTickets=saved.supportTickets||supportTickets}}catch(e){}function persist(){localStorage.setItem('pb24_release_v11',JSON.stringify({tasks,projects,goals,events,money,members,bank,supportTickets}))}function pbState(){return{tasks,events,persist,renderAll,allEvents}}
 const $=id=>document.getElementById(id),fmt=n=>'₽ '+Number(n||0).toLocaleString('ru-RU'),fmtDate=s=>s?new Date(s+'T12:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short'}):'Без срока',esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(s){$('toast').textContent=s;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2200)}function openModal(id){$(id).classList.add('open');populateLinked();if(id==='taskModal'){taskAttachedBank=[];renderAttachedList();if($('taskBankFiles'))$('taskBankFiles').value='';if($('taskFiles'))$('taskFiles').value='';setTaskPriority(2);setTaskMode('simple');setTimeout(()=>$('taskForm').elements.title?.focus(),80)}}function closeModal(id){$(id).classList.remove('open');endEdit()}document.querySelectorAll('.modal-back').forEach(x=>x.addEventListener('click',e=>{if(e.target===x)x.classList.remove('open')}));
 function openMobileMore(){$('mobileMore').classList.add('open');$('mobileMore').setAttribute('aria-hidden','false')}function closeMobileMore(){$('mobileMore')?.classList.remove('open');$('mobileMore')?.setAttribute('aria-hidden','true')}function mobileGo(id){go(id)}$('mobileMore').addEventListener('click',e=>{if(e.target===$('mobileMore'))closeMobileMore()});function go(id){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active',x.dataset.page===id));document.querySelectorAll('[data-dock]').forEach(x=>x.classList.toggle('active',x.dataset.dock===id));document.querySelector('.dock-more')?.classList.toggle('active',!['overview','tasks','calendar'].includes(id));$('crumb').textContent=document.querySelector(`#nav [data-page="${id}"]`)?.innerText.trim()||id;closeMobileMore();renderAll();if(id==='support')renderSupport()}
@@ -3010,5 +3012,5 @@ showDirection=function(a){
 </script>
 <script src="supabase-js.js"></script>
 <script src="config.js"></script>
-<script src="supabase-layer.js"></script><script src="icons-ui.js"></script><script src="bank-ui.js"></script>
+<script src="supabase-layer.js"></script><script src="icons-ui.js"></script><script src="bank-ui.js"></script><script src="promo-ui.js"></script><script src="calendar-ui.js"></script><script src="calendar-dnd.js"></script>
 </body></html>
