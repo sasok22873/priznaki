@@ -38,6 +38,7 @@
   document.head.appendChild(css);
 
   let projectFilter = '';
+  let goalFilter = '';
 
   function st() { return (typeof window.pbState === 'function') ? window.pbState() : null; }
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
@@ -51,18 +52,20 @@
 
   function ensureFilter() {
     const bar = document.querySelector('#tasks .filterbar');
-    if (!bar || bar.querySelector('[data-pb-project-filter]')) return;
-    const projects = (st() && st().projects) || [];
+    if (!bar || bar.querySelector('[data-pb-kanban-filter]')) return;
+    const s = st() || {};
+    const projects = s.projects || [];
+    const goals = s.goals || [];
     const wrap = document.createElement('div');
     wrap.className = 'pb-kanban-filter';
-    wrap.setAttribute('data-pb-project-filter', '1');
+    wrap.setAttribute('data-pb-kanban-filter', '1');
     wrap.innerHTML = '<select class="field" id="pbKanbanProject"><option value="">Все проекты</option>' +
-      projects.map(function (p) { return '<option value="' + esc(p.title) + '">' + esc(p.title) + '</option>'; }).join('') + '</select>';
+      projects.map(function (p) { return '<option value="' + esc(p.title) + '">' + esc(p.title) + '</option>'; }).join('') + '</select>' +
+      '<select class="field" id="pbKanbanGoal"><option value="">Все цели</option>' +
+      goals.map(function (g) { return '<option value="' + esc(g.title) + '">' + esc(g.title) + '</option>'; }).join('') + '</select>';
     bar.appendChild(wrap);
-    wrap.querySelector('select').addEventListener('change', function (e) {
-      projectFilter = e.target.value;
-      renderBoard();
-    });
+    wrap.querySelector('#pbKanbanProject').addEventListener('change', function (e) { projectFilter = e.target.value; renderBoard(); });
+    wrap.querySelector('#pbKanbanGoal').addEventListener('change', function (e) { goalFilter = e.target.value; renderBoard(); });
   }
 
   function boardVisible() {
@@ -82,6 +85,7 @@
       (task.date ? '<span class="pb-chip">' + esc(shortDate(task.date)) + '</span>' : '<span class="pb-chip pb-card-nodate">без срока</span>') +
       (task.owner ? '<span class="pb-chip">' + esc(task.owner) + '</span>' : '') +
       (task.project ? '<span class="pb-chip">📁 ' + esc(task.project) + '</span>' : '') +
+      (task.goal ? '<span class="pb-chip">◎ ' + esc(task.goal) + '</span>' : '') +
       '<span class="pb-prio ' + priorityClass + '">' + esc(task.priority || 'Средний') + '</span>' +
       '</div></div>';
   }
@@ -107,6 +111,7 @@
     const visible = [];
     tasks.forEach(function (t, i) {
       if (projectFilter && String(t.project || '') !== projectFilter) return;
+      if (goalFilter && String(t.goal || '') !== goalFilter) return;
       visible.push({ task: t, index: i });
     });
     const backlog = visible.filter(function (x) { return !x.task.date && !DONE_STATUSES.includes(x.task.status); });
@@ -116,7 +121,12 @@
     box.innerHTML = '';
     box.appendChild(laneEl('Бэклог · без срока', backlog, { backlog: true }));
     statuses.forEach(function (status) {
-      const items = rest.filter(function (x) { return (x.task.status || 'Новая') === status; });
+      const items = rest.filter(function (x) {
+        const real = x.task.status || 'Новая';
+        // задача с датой, но ещё «Новая» — по смыслу уже запланирована
+        const shown = (x.task.date && real === 'Новая') ? 'Запланирована' : real;
+        return shown === status;
+      });
       box.appendChild(laneEl(status, items, { status: status }));
     });
     wireDrag(box);
@@ -228,6 +238,20 @@
     persistAndRender();
     toast('Срок ' + shortDate(dateKey) + ' · статус «' + dateCtx.status + '»');
   }
+
+  // Задача со сроком — сразу «Запланирована», «Новая» только если срок не задан.
+  document.addEventListener('submit', function (e) {
+    try {
+      if (!e.target || e.target.id !== 'taskForm') return;
+      const form = e.target;
+      const dateEl = form.elements.date;
+      const statusEl = form.elements.status;
+      if (!dateEl || !statusEl) return;
+      const hasDate = !!(dateEl.value && String(dateEl.value).trim());
+      if (hasDate && (!statusEl.value || statusEl.value === 'Новая')) statusEl.value = 'Запланирована';
+      if (!hasDate && statusEl.value === 'Запланирована') statusEl.value = 'Новая';
+    } catch (_e) { }
+  }, true);
 
   // ---------- встраивание ----------
   const prevRenderAll = window.renderAll;
