@@ -203,6 +203,7 @@
     pickerCb = null;
   }
   window.pbPickIconGlobal = openPicker;
+  window.pbOpenDirectionModal = openDirectionModal;
 
   // ---------- карточка создания направления ----------
   let directionDraftIcon = '';
