@@ -29,12 +29,12 @@
   const PRIORITY_TO_DB = { 'Низкий': 'low', 'Средний': 'medium', 'Высокий': 'high' };
   const PRIORITY_FROM_DB = { low: 'Низкий', medium: 'Средний', high: 'Высокий' };
   const STATUS_TO_DB = {
-    'Новая': 'new', 'Запланирована': 'planned', 'В работе': 'in_progress',
-    'На проверке': 'review', 'Завершена': 'done', 'Отменена': 'cancelled'
+    'Запланирована': 'planned', 'В работе': 'in_progress', 'Завершена': 'done',
+    'Новая': 'planned', 'На проверке': 'in_progress', 'Отменена': 'done'
   };
   const STATUS_FROM_DB = {
-    new: 'Новая', planned: 'Запланирована', in_progress: 'В работе',
-    review: 'На проверке', done: 'Завершена', cancelled: 'Отменена'
+    planned: 'Запланирована', in_progress: 'В работе', done: 'Завершена',
+    new: 'Запланирована', review: 'В работе', cancelled: 'Завершена'
   };
 
   // ---------- цели и проекты ----------
