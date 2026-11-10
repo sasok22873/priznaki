@@ -267,6 +267,7 @@
       (s.status === 'archived' ? '<span class="pb-badge-arch">архив</span>' : ''),
       '<span class="pb-spacer" style="flex:1 1 auto"></span>',
       '<span style="font-size:11.5px;color:#6f6a7d">идей: ' + counts.total + ' · принято: ' + counts.accepted + '</span>',
+      (canWrite() ? '<button class="pb-iconbtn danger" data-brain-action="delete-session" title="Удалить сессию">🗑</button>' : ''),
       '</div>',
       '<div class="pb-brain-tabs" data-brain-stage>' + STAGES.map(function (x) {
         return '<button data-stage="' + x.key + '" class="' + (stage === x.key ? 'active' : '') + '">' + x.label + '</button>';
@@ -468,6 +469,23 @@
     if (!idea) return;
     await patchIdea(idea, { status: 'new' });
     render();
+  }
+
+  async function deleteSession() {
+    const s = state.session;
+    if (!s || !canWrite()) return;
+    if (!confirm('Удалить сессию «' + s.title + '» со всеми идеями? Это необратимо.')) return;
+    const c = sb();
+    const { error } = await c.from('brainstorm_sessions').delete().eq('id', s.id);
+    if (error) { toast('Не удалось удалить: ' + error.message); return; }
+    state.session = null;
+    state.ideas = [];
+    state.votes = {};
+    state.myVotes = {};
+    state.view = 'list';
+    await loadSessions();
+    render();
+    toast('Сессия удалена');
   }
 
   // ---------- превращение идеи ----------
@@ -720,6 +738,7 @@
       else if (a === 'export') exportSession();
       else if (a === 'archive') { patchSession({ status: 'archived', archived_at: new Date().toISOString() }).then(function () { toast('Сессия в архиве'); render(); }); }
       else if (a === 'restore-session') { patchSession({ status: 'active' }).then(function () { toast('Сессия возвращена'); render(); }); }
+      else if (a === 'delete-session') { deleteSession(); }
       return;
     }
   });
