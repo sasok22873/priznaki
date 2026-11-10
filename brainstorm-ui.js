@@ -73,7 +73,9 @@
     '.pb-idea-note{width:100%;min-height:38px;border-radius:9px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.08);color:#d8d2e6;font:12.5px/1.4 inherit;padding:6px 8px;resize:vertical}',
     '.pb-ice{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}',
     '.pb-ice label{display:grid;gap:3px;font-size:10.5px;color:#8f8a9c}',
-    '.pb-ice input{width:100%;border-radius:8px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.08);color:#e7e2f2;font:12px inherit;padding:5px 7px}',
+    '.pb-ice label{display:grid;gap:3px;font-size:10.5px;color:#8f8a9c}',
+    '.pb-ice label b{color:#e6e2ee;font-size:11.5px;font-weight:600}',
+    '.pb-ice input[type="range"]{width:100%;height:18px;accent-color:#a78bfa;background:transparent;border:0;padding:0;margin:0;cursor:pointer}',
     '.pb-ice-score{font-size:11px;color:#c4b5fd}',
     '.pb-tag{font-size:10.5px;border-radius:999px;padding:1px 8px;border:1px solid rgba(255,255,255,.12);color:#a8a3b3}',
     '.pb-tag.accepted{color:#34d399;border-color:rgba(52,211,153,.4)}',
@@ -96,6 +98,7 @@
     '@media (max-width:700px){.pb-session-grid{grid-template-columns:1fr}.pb-ice{grid-template-columns:1fr 1fr}}'
   ].join('');
   document.head.appendChild(css);
+  css.textContent += '.nav [data-page="brainstorm"] .ico{--ico:url("data:image/svg+xml,%3Csvg%20xmlns=%27http%3A//www.w3.org/2000/svg%27%20viewBox=%270%200%2024%2024%27%20fill=%27none%27%20stroke=%27black%27%20stroke-width=%271.7%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%3E%3Cpath%20d=%27M12%205a3%203%200%201%200-5.997.125%204%204%200%200%200-2.526%205.77%204%204%200%200%200%20.556%206.588A4%204%200%201%200%2012%2018Z%27/%3E%3Cpath%20d=%27M12%205a3%203%200%201%201%205.997.125%204%204%200%200%201%202.526%205.77%204%204%200%200%201-.556%206.588A4%204%200%201%201%2012%2018Z%27/%3E%3Cpath%20d=%27M15%2013a4.5%204.5%200%200%201-3-4%204.5%204.5%200%200%201-3%204%27/%3E%3Cpath%20d=%27M17.599%206.5a3%203%200%200%200%20.399-1.375%27/%3E%3Cpath%20d=%27M6.003%205.125A3%203%200%200%200%206.401%206.5%27/%3E%3Cpath%20d=%27M3.477%2010.896a4%204%200%200%201%20.585-.396%27/%3E%3Cpath%20d=%27M19.938%2010.5a4%204%200%200%201%20.585.396%27/%3E%3Cpath%20d=%27M6%2018a4%204%200%200%201-1.967-.516%27/%3E%3Cpath%20d=%27M19.967%2017.484A4%204%200%200%201%2018%2018%27/%3E%3C/svg%3E")}';
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
   function toast(m) { if (typeof window.toast === 'function') window.toast(m); }
@@ -117,7 +120,7 @@
     if (nav && !nav.querySelector('[data-page="brainstorm"]')) {
       const b = document.createElement('button');
       b.setAttribute('data-page', 'brainstorm');
-      b.innerHTML = '<span class="ico" aria-hidden="true">' + (window.pbIcon ? window.pbIcon('lightbulb') : '') + '</span>Мозговой штурм';
+      b.innerHTML = '<span class="ico" aria-hidden="true"></span>Мозговой штурм';
       const anchor = nav.querySelector('[data-page="promotion"]');
       if (anchor && anchor.nextSibling) nav.insertBefore(b, anchor.nextSibling);
       else nav.appendChild(b);
@@ -337,9 +340,9 @@
       '<textarea class="pb-idea-text" rows="1" data-idea-text>' + esc(idea.text) + '</textarea>' +
       '<textarea class="pb-idea-note" rows="1" placeholder="Почему берём / что уточнить" data-idea-note>' + esc(idea.note || '') + '</textarea>' +
       '<div class="pb-ice">' +
-      '<label>Польза<input type="number" min="0" max="10" data-ice="impact" value="' + (idea.impact || '') + '"></label>' +
-      '<label>Уверенность<input type="number" min="0" max="10" data-ice="confidence" value="' + (idea.confidence || '') + '"></label>' +
-      '<label>Лёгкость<input type="number" min="0" max="10" data-ice="ease" value="' + (idea.ease || '') + '"></label>' +
+      '<label>Польза <b data-ice-val="impact">' + (idea.impact || 0) + '</b><input type="range" min="0" max="10" step="1" data-ice="impact" value="' + (idea.impact || 0) + '"></label>' +
+      '<label>Уверенность <b data-ice-val="confidence">' + (idea.confidence || 0) + '</b><input type="range" min="0" max="10" step="1" data-ice="confidence" value="' + (idea.confidence || 0) + '"></label>' +
+      '<label>Лёгкость <b data-ice-val="ease">' + (idea.ease || 0) + '</b><input type="range" min="0" max="10" step="1" data-ice="ease" value="' + (idea.ease || 0) + '"></label>' +
       '</div>' +
       '<span class="pb-ice-score">ICE: ' + iceScore(idea) + '/30</span>' +
       '</div>' +
@@ -745,6 +748,8 @@
       const key = el.getAttribute('data-ice');
       const v = Math.max(0, Math.min(10, Number(el.value) || 0));
       idea[key] = v;
+      const valEl = ideaEl.querySelector('[data-ice-val="' + key + '"]');
+      if (valEl) valEl.textContent = v;
       const scoreEl = ideaEl.querySelector('.pb-ice-score');
       if (scoreEl) scoreEl.textContent = 'ICE: ' + iceScore(idea) + '/30';
       scheduleSave(function () { patchIdea(idea, { impact: idea.impact, confidence: idea.confidence, ease: idea.ease }); });
