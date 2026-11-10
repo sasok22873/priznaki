@@ -3,8 +3,8 @@
    фильтр по проекту. Работает поверх штатного канбана.
    ========================================================================= */
 (function () {
-  const WORK_STATUSES = ['В работе', 'На проверке'];
-  const DONE_STATUSES = ['Завершена', 'Отменена'];
+  const WORK_STATUSES = ['В работе'];
+  const DONE_STATUSES = ['Завершена'];
 
   const css = document.createElement('style');
   css.id = 'pbKanbanStyle';
@@ -249,7 +249,6 @@
       if (!dateEl || !statusEl) return;
       const hasDate = !!(dateEl.value && String(dateEl.value).trim());
       if (hasDate && (!statusEl.value || statusEl.value === 'Новая')) statusEl.value = 'Запланирована';
-      if (!hasDate && statusEl.value === 'Запланирована') statusEl.value = 'Новая';
     } catch (_e) { }
   }, true);
 
