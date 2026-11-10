@@ -254,6 +254,15 @@
     } catch (_e) { }
   }, true);
 
+  // Кнопка на главной: открыть канбан с бэклогом
+  window.pbOpenBacklog = function () {
+    if (typeof window.go === 'function') window.go('tasks');
+    setTimeout(function () {
+      const tab = document.querySelector('[data-taskview="board"]');
+      if (tab) tab.click();
+    }, 80);
+  };
+
   // ---------- встраивание ----------
   const prevRenderAll = window.renderAll;
   window.renderAll = function () {
