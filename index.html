@@ -2305,6 +2305,10 @@ blockquote { margin: 0; }
 @media (max-width: 900px) {
   .sidebar { display: none; }
 
+  .tabs { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs .tab { flex: 0 0 auto; white-space: nowrap; padding: 0 10px; font-size: 12.5px; }
+
   #budgetContent .layout2 { grid-template-columns: minmax(0, 1fr); }
 
   .workspace {
