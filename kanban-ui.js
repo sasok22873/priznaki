@@ -33,7 +33,9 @@
     '#pbDatePrompt .modal{max-width:460px}',
     '.pb-date-presets{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}',
     '.pb-date-presets .btn{justify-content:center}',
-    '.pb-date-custom{display:flex;gap:8px;align-items:center;margin-top:4px}'
+    '.pb-date-custom{display:flex;gap:8px;align-items:center;margin-top:4px}',
+    '.pb-kanban-filter{flex-wrap:wrap}',
+    '@media (max-width:700px){#tasks .filterbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:stretch}#tasks .filterbar>input{grid-column:1/-1}#tasks .filterbar>button{grid-column:1/-1}#tasks .filterbar .pb-kanban-filter{grid-column:1/-1;display:flex;flex-wrap:nowrap;gap:8px;width:100%}#tasks .filterbar .pb-kanban-filter select{flex:1 1 0;min-width:0;width:auto}#boardView.pb-kanban{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(240px,80vw);overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:8px;-webkit-overflow-scrolling:touch}.pb-lane{scroll-snap-align:start}.pb-kanban-filter{width:100%}.pb-kanban-filter select{flex:1 1 140px;min-width:0}}'
   ].join('');
   document.head.appendChild(css);
 
