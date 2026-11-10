@@ -1,0 +1,19 @@
+{
+  "name": "priznaki-v2",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "typecheck": "pnpm --filter @pb/shared build && pnpm --filter @pb/api --filter @pb/web typecheck",
+    "typecheck:mobile": "pnpm --filter @pb/mobile typecheck",
+    "test": "pnpm --filter @pb/api test",
+    "build": "pnpm --filter @pb/shared build && pnpm --filter @pb/api build && pnpm --filter @pb/web build",
+    "dev:api": "pnpm --filter @pb/api dev",
+    "dev:web": "pnpm --filter @pb/web dev",
+    "db:generate": "pnpm --filter @pb/api db:generate",
+    "db:validate": "pnpm --filter @pb/api db:validate"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}

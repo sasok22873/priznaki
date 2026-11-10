@@ -1,0 +1,85 @@
+// Схема повторяет текущую базу Supabase (public-схема), чтобы миграция была бесшовной.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id           String  @id @db.Uuid
+  email        String  @default("")
+  fullName     String  @default("") @map("full_name")
+  role         String  @default("member")
+  accessStatus String  @default("active") @map("access_status")
+
+  @@map("profiles")
+}
+
+model Direction {
+  id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+  icon String @default("")
+
+  @@map("directions")
+}
+
+model Goal {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title         String
+  area          String   @default("")
+  measure       String   @default("")
+  dueDate       DateTime? @map("due_date") @db.Date
+  status        String   @default("active")
+  pct           Int      @default(0)
+  budgetPlanned Decimal? @map("budget_planned") @db.Decimal(14, 2)
+  icon          String   @default("")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+
+  @@map("goals")
+}
+
+model Project {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title         String
+  area          String   @default("")
+  goal          String   @default("")
+  stage         String   @default("")
+  dueDate       DateTime? @map("due_date") @db.Date
+  status        String   @default("active")
+  pct           Int      @default(0)
+  budgetPlanned Decimal? @map("budget_planned") @db.Decimal(14, 2)
+  icon          String   @default("")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("projects")
+}
+
+model Task {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String
+  description String    @default("")
+  result      String    @default("")
+  note        String    @default("")
+  area        String    @default("")
+  project     String    @default("")
+  goal        String    @default("")
+  ownerName   String    @default("") @map("owner_name")
+  ownerId     String?   @map("owner_id") @db.Uuid
+  createdBy   String?   @map("created_by") @db.Uuid
+  dueDate     DateTime? @map("due_date") @db.Date
+  dueTime     String    @default("") @map("due_time")
+  priority    String    @default("medium")
+  status      String    @default("planned")
+  budgetPlanned Decimal? @map("budget_planned") @db.Decimal(14, 2)
+  icon        String    @default("")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
+}
