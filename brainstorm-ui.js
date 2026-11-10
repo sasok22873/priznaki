@@ -95,7 +95,7 @@
     '.pb-type-grid button{padding:14px;border-radius:13px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.02);color:#e7e2f2;font:13px inherit;cursor:pointer;display:grid;gap:4px;text-align:left}',
     '.pb-type-grid button:hover{border-color:rgba(167,139,250,.7);background:rgba(167,139,250,.1)}',
     '.pb-type-grid small{color:#8f8a9c;font-size:11px}',
-    '@media (max-width:700px){.pb-session-grid{grid-template-columns:1fr}.pb-ice{grid-template-columns:1fr 1fr}}'
+    '@media (max-width:700px){.pb-brain-bar{gap:8px}.pb-brain-tabs{flex-wrap:wrap;width:100%}.pb-brain-tabs button{flex:1 1 auto}.pb-brain-head{gap:8px}.pb-brain-title{font-size:17px;word-break:break-word}#brainstormApp{padding-bottom:6px}.pb-add-row{flex-direction:row;align-items:stretch}.pb-add-row textarea{min-height:52px}.pb-idea{padding:10px;gap:8px}.pb-idea-text{resize:none}.pb-sec-title{flex-wrap:wrap}.pb-idea-actions{flex-direction:column;align-items:flex-end}.pb-ice{grid-template-columns:1fr;gap:8px}.pb-type-grid{grid-template-columns:1fr}.pb-session-grid{grid-template-columns:1fr}.pb-summary{grid-template-columns:1fr 1fr}}',
   ].join('');
   document.head.appendChild(css);
   css.textContent += '.nav [data-page="brainstorm"] .ico{--ico:url("data:image/svg+xml,%3Csvg%20xmlns=%27http%3A//www.w3.org/2000/svg%27%20viewBox=%270%200%2024%2024%27%20fill=%27none%27%20stroke=%27black%27%20stroke-width=%271.7%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%3E%3Cpath%20d=%27M12%205a3%203%200%201%200-5.997.125%204%204%200%200%200-2.526%205.77%204%204%200%200%200%20.556%206.588A4%204%200%201%200%2012%2018Z%27/%3E%3Cpath%20d=%27M12%205a3%203%200%201%201%205.997.125%204%204%200%200%201%202.526%205.77%204%204%200%200%201-.556%206.588A4%204%200%201%201%2012%2018Z%27/%3E%3Cpath%20d=%27M15%2013a4.5%204.5%200%200%201-3-4%204.5%204.5%200%200%201-3%204%27/%3E%3Cpath%20d=%27M17.599%206.5a3%203%200%200%200%20.399-1.375%27/%3E%3Cpath%20d=%27M6.003%205.125A3%203%200%200%200%206.401%206.5%27/%3E%3Cpath%20d=%27M3.477%2010.896a4%204%200%200%201%20.585-.396%27/%3E%3Cpath%20d=%27M19.938%2010.5a4%204%200%200%201%20.585.396%27/%3E%3Cpath%20d=%27M6%2018a4%204%200%200%201-1.967-.516%27/%3E%3Cpath%20d=%27M19.967%2017.484A4%204%200%200%201%2018%2018%27/%3E%3C/svg%3E")}';
@@ -125,12 +125,13 @@
       if (anchor && anchor.nextSibling) nav.insertBefore(b, anchor.nextSibling);
       else nav.appendChild(b);
     }
-    const more = document.getElementById('mobileMore');
-    if (more && !more.querySelector('[data-page="brainstorm"]')) {
+    const moreGrid = document.querySelector('#mobileMore .mobile-more-grid');
+    if (moreGrid && !moreGrid.querySelector('[data-mobile-page="brainstorm"]')) {
       const b = document.createElement('button');
-      b.setAttribute('data-page', 'brainstorm');
-      b.textContent = 'Мозговой штурм';
-      more.appendChild(b);
+      b.setAttribute('data-mobile-page', 'brainstorm');
+      b.innerHTML = '<span>🧠</span><b>Мозговой штурм</b>';
+      b.onclick = function () { if (typeof window.mobileGo === 'function') window.mobileGo('brainstorm'); };
+      moreGrid.appendChild(b);
     }
   }
 
@@ -676,6 +677,33 @@
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
     a.download = s.title.replace(/[\\/:*?"<>|]+/g, '_') + '.txt';
     document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  // «＋ Создать» → карточка «Мозговой штурм»
+  function injectCreateChoice() {
+    const grid = document.getElementById('createChoices');
+    if (!grid || grid.querySelector('[data-create="brainstorm"]')) return;
+    const b = document.createElement('button');
+    b.className = 'create-choice';
+    b.setAttribute('data-create', 'brainstorm');
+    b.innerHTML = '<span class="choice-icon">' + (window.pbIcon ? window.pbIcon('brain') : '✦') + '</span><b>Мозговой штурм</b><small>Сессия идей: штурм → отбор → итоги</small>';
+    b.onclick = function () {
+      if (typeof window.closeCreateHub === 'function') window.closeCreateHub();
+      if (typeof window.go === 'function') window.go('brainstorm');
+      setTimeout(function () {
+        onVisible();
+        if (!state.session) openSessionModal();
+      }, 260);
+    };
+    grid.appendChild(b);
+  }
+  if (typeof window.openCreateHub === 'function') {
+    const _openHub = window.openCreateHub;
+    window.openCreateHub = function () {
+      const res = _openHub.apply(this, arguments);
+      try { injectCreateChoice(); } catch (e) { }
+      return res;
+    };
   }
 
   // ---------- встраивание и события ----------
