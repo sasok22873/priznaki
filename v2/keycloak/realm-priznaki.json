@@ -1,0 +1,112 @@
+{
+  "realm": "priznaki",
+  "displayName": "ПРИЗНАКИ БЕШЕНСТВА 24",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 28800,
+  "roles": {
+    "realm": [
+      { "name": "owner", "description": "Владелец штаба" },
+      { "name": "member", "description": "Участник" },
+      { "name": "viewer", "description": "Наблюдатель" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "pb-web",
+      "name": "Штаб · web",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:8080/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "pb-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "pb-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "pb-mobile",
+      "name": "Штаб · mobile",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "priznaki24://auth",
+        "exp://127.0.0.1:19000/--/auth",
+        "exp://localhost:19000/--/auth"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "pb-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "pb-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "owner",
+      "email": "owner@priznaki.local",
+      "firstName": "Владелец",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "owner123", "temporary": false }],
+      "realmRoles": ["owner"]
+    },
+    {
+      "username": "member",
+      "email": "member@priznaki.local",
+      "firstName": "Участник",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "member123", "temporary": false }],
+      "realmRoles": ["member"]
+    },
+    {
+      "username": "viewer",
+      "email": "viewer@priznaki.local",
+      "firstName": "Наблюдатель",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "viewer123", "temporary": false }],
+      "realmRoles": ["viewer"]
+    }
+  ]
+}

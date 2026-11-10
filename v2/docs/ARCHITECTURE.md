@@ -4,19 +4,21 @@
 
 ```
 React SPA (Vite, FSD) ──┐
-                        ├── REST /api ──► Express (Node 20) ──► Prisma ──► PostgreSQL (Supabase)
+                        ├── REST /api ──► Express (Node 20) ──► Prisma ──► PostgreSQL
 Expo App (RN, FSD) ─────┘                              │
-                                                       └── Auth: Supabase GoTrue (JWKS-валидация токена)
+                                                       └── Auth: Keycloak (OIDC, JWKS-валидация access-токена)
 ```
 
 - **База данных** — тот же проект Supabase Postgres, чтобы миграция была бесшовной.
   Prisma-схема повторяет текущие `public`-таблицы (`tasks`, `goals`, `projects`, `directions`, `profiles`…),
   статусы старых значений (`new`, `review`, `cancelled`) маппятся в новый набор (`planned`, `in_progress`, `done`).
-- **Аутентификация** — остаётся Supabase Auth: web/mobile получают access-токен через
-  `POST /auth/v1/token?grant_type=password`, API проверяет подпись по JWKS
-  (`/auth/v1/.well-known/jwks.json`, audience `authenticated`) и читает роль из `profiles`.
-  Пароли не мигрируются, пользователи не переносятся.
-- **Права** — те же, что сейчас: `owner`/`member` пишут, `viewer` только читает;
+- **Аутентификация** — Keycloak (realm `priznaki`): web использует `keycloak-js`
+  (Authorization Code + PKCE, клиент `pb-web`), mobile — `expo-auth-session` (клиент `pb-mobile`,
+  redirect `priznaki24://auth`). API проверяет access-токен по JWKS
+  (`/realms/priznaki/protocol/openid-connect/certs`), issuer, аудиторию `pb-api`
+  и вытаскивает роль из `realm_access.roles` (owner/member/viewer).
+  Тестовые пользователи: owner/member/viewer (`owner123`/`member123`/`viewer123`).
+- **Права** — роли из Keycloak: `owner`/`member` пишут, `viewer` только читает;
   менять/удалять задачу может владелец или автор (`created_by`/`owner_id`).
 
 ## 2. Backend (`apps/api`)
@@ -85,4 +87,4 @@ Prisma-схема (см. `apps/api/prisma/schema.prisma`) описывает т�
 - **CI** — `.github/workflows/ci.yml`: install → typecheck → prisma validate → tests → build web → docker build.
 - **Локально** — `docker-compose.yml` (postgres + api + web).
 - **Прод** — API: Render/Railway/Fly (Docker), Web: Vercel/Cloudflare Pages, Mobile: EAS Build.
-  Секреты: `DATABASE_URL`, `SUPABASE_URL`, `VITE_SUPABASE_*`, `EXPO_PUBLIC_*`.
+  Секреты: `DATABASE_URL`, `KEYCLOAK_*`, `VITE_KEYCLOAK_*`, `EXPO_PUBLIC_*`.

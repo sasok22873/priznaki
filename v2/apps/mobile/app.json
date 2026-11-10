@@ -5,12 +5,22 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "splash": { "backgroundColor": "#0b0b0f" },
-    "ios": { "supportsTablet": true, "bundleIdentifier": "ru.priznaki24.app" },
-    "android": { "package": "ru.priznaki24.app" },
+    "splash": {
+      "backgroundColor": "#0b0b0f"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ru.priznaki24.app"
+    },
+    "android": {
+      "package": "ru.priznaki24.app"
+    },
     "extra": {
       "apiUrl": "http://localhost:4000/api",
-      "supabaseUrl": "https://mbbetmtxawduvcsttiis.supabase.co"
-    }
+      "keycloakUrl": "http://localhost:8080",
+      "keycloakRealm": "priznaki",
+      "keycloakClientId": "pb-mobile"
+    },
+    "scheme": "priznaki24"
   }
 }

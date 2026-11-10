@@ -1,57 +1,53 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { env } from '@/shared/config/env';
+
+export type SessionUser = {
+  id: string;
+  email: string;
+  name: string;
+  roles: string[];
+};
 
 type SessionState = {
   token: string | null;
-  refreshToken: string | null;
-  email: string | null;
-  userId: string | null;
-  expiresAt: number | null;
-  signIn: (email: string, password: string) => Promise<void>;
+  user: SessionUser | null;
+  ready: boolean;
+  setReady: (ready: boolean) => void;
+  setToken: (token: string) => void;
   signOut: () => void;
 };
 
-type SupabaseTokenResponse = {
-  access_token?: string;
-  refresh_token?: string;
-  expires_in?: number;
-  user?: { id?: string; email?: string };
-  error_description?: string;
-  msg?: string;
-};
+function parseToken(token: string): SessionUser | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))) as {
+      sub?: string;
+      email?: string;
+      name?: string;
+      preferred_username?: string;
+      realm_access?: { roles?: string[] };
+    };
+    return {
+      id: String(json.sub ?? ''),
+      email: String(json.email ?? ''),
+      name: String(json.name ?? json.preferred_username ?? ''),
+      roles: json.realm_access?.roles ?? [],
+    };
+  } catch {
+    return null;
+  }
+}
 
 export const useSession = create<SessionState>()(
   persist(
     (set) => ({
       token: null,
-      refreshToken: null,
-      email: null,
-      userId: null,
-      expiresAt: null,
-      signIn: async (email, password) => {
-        const res = await fetch(`${env.VITE_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({ email, password }),
-        });
-        const payload = (await res.json().catch(() => ({}))) as SupabaseTokenResponse;
-        if (!res.ok || !payload.access_token) {
-          throw new Error(payload.error_description ?? payload.msg ?? 'Неверная почта или пароль');
-        }
-        set({
-          token: payload.access_token,
-          refreshToken: payload.refresh_token ?? null,
-          email: payload.user?.email ?? email,
-          userId: payload.user?.id ?? null,
-          expiresAt: payload.expires_in ? Date.now() + payload.expires_in * 1000 : null,
-        });
-      },
-      signOut: () =>
-        set({ token: null, refreshToken: null, email: null, userId: null, expiresAt: null }),
+      user: null,
+      ready: false,
+      setReady: (ready) => set({ ready }),
+      setToken: (token) => set({ token, user: parseToken(token) }),
+      signOut: () => set({ token: null, user: null }),
     }),
     { name: 'pb2-session' },
   ),

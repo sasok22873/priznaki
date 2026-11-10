@@ -9,11 +9,39 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pb"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+      KC_DB_USERNAME: pb
+      KC_DB_PASSWORD: pb
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: "8080"
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak/realm-priznaki.json:/opt/keycloak/data/import/realm-priznaki.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   api:
     build:
@@ -23,11 +51,15 @@ services:
       NODE_ENV: development
       PORT: 4000
       DATABASE_URL: postgresql://pb:pb@db:5432/pb
-      SUPABASE_URL: ${SUPABASE_URL:-https://mbbetmtxawduvcsttiis.supabase.co}
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/priznaki
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/priznaki/protocol/openid-connect/certs
+      KEYCLOAK_AUDIENCE: pb-api
       CORS_ORIGINS: http://localhost:8080,http://localhost:5173
     ports:
       - "4000:4000"
     depends_on:
+      keycloak:
+        condition: service_started
       db:
         condition: service_healthy
 
@@ -35,6 +67,11 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        VITE_KEYCLOAK_URL: http://localhost:8080
+        VITE_KEYCLOAK_REALM: priznaki
+        VITE_KEYCLOAK_CLIENT_ID: pb-web
+        VITE_API_URL: /api
     ports:
       - "8080:80"
     depends_on:

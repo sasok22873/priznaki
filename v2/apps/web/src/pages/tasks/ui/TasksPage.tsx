@@ -5,6 +5,7 @@ import { useSession } from '@/entities/session';
 import { TasksBoard } from '@/widgets/tasks-board';
 import { useTaskMutations } from '@/features/task-status';
 import { Button, Card, Input } from '@/shared/ui';
+import { keycloakLogout } from '@/shared/keycloak';
 
 const newTaskSchema = z.object({
   title: z.string().trim().min(1, 'Введите название').max(200),
@@ -13,8 +14,7 @@ const newTaskSchema = z.object({
 
 export function TasksPage() {
   const token = useSession((s) => s.token);
-  const email = useSession((s) => s.email);
-  const signOut = useSession((s) => s.signOut);
+  const user = useSession((s) => s.user);
   const { create } = useTaskMutations();
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -31,7 +31,7 @@ export function TasksPage() {
       return;
     }
     create.mutate(
-      { title: parsed.data.title, dueDate: parsed.data.dueDate, status: parsed.data.dueDate ? 'planned' : 'planned' },
+      { title: parsed.data.title, dueDate: parsed.data.dueDate },
       {
         onSuccess: () => {
           setTitle('');
@@ -50,8 +50,8 @@ export function TasksPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Задачи</h1>
         </div>
         <div className="ml-auto flex items-center gap-2 text-[12px] text-zinc-500">
-          {email}
-          <Button variant="ghost" onClick={signOut}>
+          {user?.name || user?.email}
+          <Button variant="ghost" onClick={keycloakLogout}>
             Выйти
           </Button>
         </div>

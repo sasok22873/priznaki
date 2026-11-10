@@ -30,7 +30,7 @@ export function createApp(deps: AppDeps) {
     res.json({ ok: true, service: 'pb-api', time: new Date().toISOString() });
   });
 
-  const auth = createAuthMiddleware(deps.db, deps.verifyToken);
+  const auth = createAuthMiddleware(deps.verifyToken);
 
   app.get('/api/me', auth, (req, res) => {
     res.json({ data: req.user });

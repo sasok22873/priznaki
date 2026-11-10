@@ -4,8 +4,11 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().min(1),
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_JWT_AUD: z.string().default('authenticated'),
+  /** http://localhost:8080/realms/priznaki — именно этот issuer приходит в токене */
+  KEYCLOAK_ISSUER: z.string().url(),
+  /** Внутри Docker: http://keycloak:8080/realms/priznaki/protocol/openid-connect/certs */
+  KEYCLOAK_JWKS_URL: z.string().url().optional(),
+  KEYCLOAK_AUDIENCE: z.string().default('pb-api'),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
 });
 

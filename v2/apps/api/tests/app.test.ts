@@ -52,17 +52,6 @@ const baseTask = (over: Partial<TaskRow>): TaskRow => ({
 function createFakeDb(seed: TaskRow[] = []) {
   const tasks = [...seed];
   const db = {
-    profile: {
-      findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
-        where.id === 'user-member'
-          ? { id: 'user-member', email: 'member@example.com', fullName: 'Участник', role: 'member', accessStatus: 'active' }
-          : where.id === 'user-owner'
-            ? { id: 'user-owner', email: 'owner@example.com', fullName: 'Владелец', role: 'owner', accessStatus: 'active' }
-            : where.id === 'user-viewer'
-              ? { id: 'user-viewer', email: 'viewer@example.com', fullName: 'Наблюдатель', role: 'viewer', accessStatus: 'active' }
-              : null,
-      ),
-    },
     task: {
       findMany: vi.fn(async () => tasks),
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => tasks.find((t) => t.id === where.id) ?? null),
@@ -90,10 +79,11 @@ function createFakeDb(seed: TaskRow[] = []) {
   return { db: db as unknown as Db, tasks, raw: db };
 }
 
-const users: Record<string, { id: string; email: string }> = {
-  'token-member': { id: 'user-member', email: 'member@example.com' },
-  'token-owner': { id: 'user-owner', email: 'owner@example.com' },
-  'token-viewer': { id: 'user-viewer', email: 'viewer@example.com' },
+/** Фейковый верификатор: эмулирует результат проверки Keycloak-токена */
+const users: Record<string, { id: string; email: string; role: 'owner' | 'member' | 'viewer'; name: string }> = {
+  'token-member': { id: 'user-member', email: 'member@example.com', role: 'member', name: 'Участник' },
+  'token-owner': { id: 'user-owner', email: 'owner@example.com', role: 'owner', name: 'Владелец' },
+  'token-viewer': { id: 'user-viewer', email: 'viewer@example.com', role: 'viewer', name: 'Наблюдатель' },
 };
 
 const verifyToken: AuthVerifier = async (token) => {
@@ -126,6 +116,12 @@ describe('API', () => {
     const res = await request(app).get('/api/tasks');
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('/api/me отдаёт пользователя и роль из токена', async () => {
+    const res = await request(app).get('/api/me').set(auth('token-member'));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ email: 'member@example.com', role: 'member' });
   });
 
   it('возвращает задачи и маппит старые статусы', async () => {
